@@ -39,7 +39,7 @@ public final class DockList {
             mine = scan.ok() ? scan.structure() : null;
         }
         if (mine == null) {
-            return new DockListS2C(false, List.of(), List.of());
+            return new DockListS2C(false, List.of(), List.of(), DockListS2C.Shape.EMPTY);
         }
         VesselStats myStats = new VesselStats(mine);
         boolean rcs = !myStats.rcs().isEmpty();
@@ -62,7 +62,7 @@ public final class DockList {
                 distance = v.orbital().state().position().sub(own.orbital().state().position()).length();
             }
             ships.add(new DockListS2C.Entry(v.getUUID(), v.orbital().cell(), v.getName().getString(), v.orbital().body().id(),
-                    distance, owned, ports));
+                    distance, owned, ports, DockListS2C.Shape.of(v.structure().blocks())));
         }
         ServerLevel space = player.server.getLevel(SpaceDimension.KEY);
         if (space != null) {
@@ -80,12 +80,66 @@ public final class DockList {
                 if (own != null && own.orbital() != null && own.orbital().body().id().equals(p.body())) {
                     distance = Rendezvous.parkedPosition(p, own.orbital().time()).sub(own.orbital().state().position()).length();
                 }
-                ships.add(new DockListS2C.Entry(p.id(), p.cell(), nameOf(p.name(), space), p.body(), distance, owned, ports));
+                ships.add(new DockListS2C.Entry(p.id(), p.cell(), nameOf(p.name(), space), p.body(), distance, owned, ports,
+                        DockListS2C.Shape.of(blocks.blocks())));
             }
         }
         // Nearest first; those round other worlds after.
         ships.sort((a, b) -> Double.compare(a.distance() < 0 ? Double.MAX_VALUE : a.distance(), b.distance() < 0 ? Double.MAX_VALUE : b.distance()));
-        return new DockListS2C(rcs, freePorts(mine), ships);
+        return new DockListS2C(rcs, freePorts(mine), ships, DockListS2C.Shape.of(mine.blocks()));
+    }
+
+    /**
+     * The other ships in orbit a player sees on the map: their own (or anyone's), and other
+     * people's with a radio rack. Ships parked in orbit too.
+     */
+    public static com.thepearlking.stevespace.network.FleetS2C fleet(ServerPlayer player) {
+        double t = ServerUniverse.time(player.server);
+        VesselEntity own = VesselEntity.shipOf(player, 2);
+        List<com.thepearlking.stevespace.network.FleetS2C.Ship> ships = new ArrayList<>();
+        for (VesselEntity v : VesselEntity.serverVessels()) {
+            if (v == own || v.isRemoved() || v.orbital() == null || v.stats() == null) {
+                continue;
+            }
+            boolean owned = v.ownedBy(player);
+            if (!owned && !hasRadio(v.structure())) {
+                continue;
+            }
+            var s = v.orbital().state();
+            var at = s.position().add(s.velocity().scale(t - v.orbital().time())); // a tick or two on, to now
+            ships.add(new com.thepearlking.stevespace.network.FleetS2C.Ship(v.getUUID(), v.getName().getString(), v.orbital().body().id(),
+                    owned, new double[]{at.x(), at.y(), at.z(), s.velocity().x(), s.velocity().y(), s.velocity().z()}));
+        }
+        ServerLevel space = player.server.getLevel(SpaceDimension.KEY);
+        for (ParkedShips.Parked p : List.copyOf(ParkedShips.get(player.server).all())) {
+            boolean owned = p.owner() == null || p.owner().equals(player.getUUID());
+            if (!owned && (space == null || !parkedHasRadio(space, p))) {
+                continue;
+            }
+            var body = ServerUniverse.system().body(p.body());
+            if (body == null) {
+                continue;
+            }
+            double mu = body.mu() * com.thepearlking.stevespace.config.SpaceConfig.GRAVITY_SCALE.get();
+            var s = com.thepearlking.stevespace.universe.Kepler.elementsFromState(p.state(), mu, p.time()).stateAt(t, mu);
+            ships.add(new com.thepearlking.stevespace.network.FleetS2C.Ship(p.id() != null ? p.id() : new java.util.UUID(0, p.cell()),
+                    space == null ? p.name() : nameOf(p.name(), space), p.body(), owned,
+                    new double[]{s.position().x(), s.position().y(), s.position().z(), s.velocity().x(), s.velocity().y(), s.velocity().z()}));
+        }
+        return new com.thepearlking.stevespace.network.FleetS2C(t, ships);
+    }
+
+    /** Whether a parked ship has a radio rack (only looked for if its blocks are loaded). */
+    private static boolean parkedHasRadio(ServerLevel space, ParkedShips.Parked p) {
+        for (BlockPos pos : BlockPos.betweenClosed(p.min(), p.max())) {
+            if (!space.isLoaded(pos)) {
+                return false;
+            }
+            if (space.getBlockState(pos).is(ModBlocks.RADIO_RACK.get())) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private static boolean hasRadio(VesselStructure structure) {

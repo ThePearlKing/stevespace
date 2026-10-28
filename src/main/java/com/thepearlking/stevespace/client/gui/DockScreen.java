@@ -19,7 +19,9 @@ import java.util.List;
  */
 public class DockScreen extends Screen {
 
-    private static final int W = 300;
+    private static final int W = 440;
+    /** Width of the left part (list and ports); the ship pictures are to its right. */
+    private static final int LIST_W = 300;
     private static final int H = 236;
     private static final int SCREEN = 0xF00B0F0D;
     private static final int FRAME = 0xFF3B4247;
@@ -46,6 +48,14 @@ public class DockScreen extends Screen {
     public DockScreen(Screen parent) {
         super(Component.translatable("screen.stevespace.dock"));
         this.parent = parent;
+    }
+
+    /** Client tests: picks their port {@code index} on the open dock menu. */
+    public static void pickForTest(int index) {
+        if (Minecraft.getInstance().screen instanceof DockScreen screen) {
+            screen.theirPort = index;
+            screen.rebuildWidgets();
+        }
     }
 
     /** The server's answer to our request. */
@@ -84,7 +94,7 @@ public class DockScreen extends Screen {
                 addRenderableWidget(b);
                 portButtons.add(b);
                 x += 57;
-                if (x + 54 > left + W - 8) {
+                if (x + 54 > left + LIST_W - 8) {
                     break; // more ports than fit: the first few
                 }
             }
@@ -102,13 +112,13 @@ public class DockScreen extends Screen {
                 addRenderableWidget(b);
                 portButtons.add(b);
                 x += 57;
-                if (x + 54 > left + W - 8) {
+                if (x + 54 > left + LIST_W - 8) {
                     break;
                 }
             }
         }
         dock = Button.builder(Component.translatable("screen.stevespace.dock.go"), b -> go())
-                .bounds(left + W - 12 - 90, top + H - 26, 90, 20).build();
+                .bounds(left + LIST_W - 12 - 90, top + H - 26, 90, 20).build();
         dock.active = list != null && selected >= 0 && theirPort >= 0 && myPort >= 0;
         addRenderableWidget(dock);
         addRenderableWidget(Button.builder(Component.translatable("gui.back"), b -> onClose())
@@ -138,7 +148,7 @@ public class DockScreen extends Screen {
         if (list != null) {
             int left = (width - W) / 2;
             int top = (height - H) / 2 + listTop();
-            if (mouseX >= left + 10 && mouseX <= left + W - 10 && mouseY >= top && mouseY < top + ROWS * ROW) {
+            if (mouseX >= left + 10 && mouseX <= left + LIST_W - 10 && mouseY >= top && mouseY < top + ROWS * ROW) {
                 int row = (int) ((mouseY - top) / ROW) + scroll;
                 if (row < list.ships().size() && row != selected) {
                     selected = row;
@@ -189,11 +199,11 @@ public class DockScreen extends Screen {
         }
         if (!list.rcs()) {
             // Big and red: docking without RCS works, but it's slow and rough.
-            g.fill(left + 8, top + 24, left + W - 8, top + 54, RED_BACK);
-            g.renderOutline(left + 8, top + 24, W - 16, 30, RED);
+            g.fill(left + 8, top + 24, left + LIST_W - 8, top + 54, RED_BACK);
+            g.renderOutline(left + 8, top + 24, LIST_W - 16, 30, RED);
             g.drawCenteredString(font, Component.translatable("screen.stevespace.dock.no_rcs").withStyle(s -> s.withBold(true)),
-                    left + W / 2, top + 28, RED);
-            g.drawCenteredString(font, Component.translatable("screen.stevespace.dock.no_rcs_detail"), left + W / 2, top + 41, 0xFFFFB0B0);
+                    left + LIST_W / 2, top + 28, RED);
+            g.drawCenteredString(font, Component.translatable("screen.stevespace.dock.no_rcs_detail"), left + LIST_W / 2, top + 41, 0xFFFFB0B0);
         }
         int y0 = top + listTop();
         if (list.ships().isEmpty()) {
@@ -205,25 +215,34 @@ public class DockScreen extends Screen {
             DockListS2C.Entry e = list.ships().get(i);
             int y = y0 + row * ROW;
             if (i == selected) {
-                g.fill(left + 10, y - 1, left + W - 10, y + ROW - 2, SELECTED);
+                g.fill(left + 10, y - 1, left + LIST_W - 10, y + ROW - 2, SELECTED);
             }
             g.drawString(font, font.plainSubstrByWidth(e.name(), 150), left + 14, y + 1, i == selected ? GREEN : 0xFFB8D8C4, false);
             String where = e.distance() >= 0 ? FlightText.distance(e.distance())
                     : Component.translatable("screen.stevespace.dock.orbiting", body(e.body())).getString();
             String whose = Component.translatable(e.owned() ? "screen.stevespace.dock.yours" : "screen.stevespace.dock.radio").getString();
             String right = where + "  " + whose;
-            g.drawString(font, right, left + W - 14 - font.width(right), y + 1, GREEN_DIM, false);
+            g.drawString(font, right, left + LIST_W - 14 - font.width(right), y + 1, GREEN_DIM, false);
         }
         if (list.ships().size() > ROWS) {
             int barH = ROWS * ROW;
             int knob = Math.max(8, barH * ROWS / list.ships().size());
             int knobY = y0 + (barH - knob) * scroll / Math.max(1, list.ships().size() - ROWS);
-            g.fill(left + W - 9, knobY, left + W - 7, knobY + knob, GREEN_DIM);
+            g.fill(left + LIST_W - 9, knobY, left + LIST_W - 7, knobY + knob, GREEN_DIM);
         }
         if (selected >= 0) {
             int y = y0 + ROWS * ROW + 22;
             g.drawString(font, Component.translatable("screen.stevespace.dock.their_port"), left + 12, y, GREEN, false);
             g.drawString(font, Component.translatable("screen.stevespace.dock.my_port"), left + 12, y + 20, GREEN, false);
+            // Pictures of both ships, turning, the picked ports lit up.
+            DockListS2C.Entry ship = list.ships().get(selected);
+            int px = left + LIST_W;
+            int pw = W - LIST_W - 10;
+            int ph = (H - 34) / 2;
+            ShipPicture.draw(g, ship.shape(), theirPort >= 0 ? ship.ports().get(theirPort).pos() : null,
+                    px, top + 24, pw, ph, ship.name());
+            ShipPicture.draw(g, list.myShape(), myPort >= 0 ? list.mine().get(myPort).pos() : null,
+                    px, top + 28 + ph, pw, ph, Component.translatable("screen.stevespace.dock.your_ship").getString());
         }
     }
 

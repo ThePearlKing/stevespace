@@ -154,12 +154,6 @@ public class VesselEntity extends Entity implements IEntityAdditionalSpawnData {
     private final Autopilot autopilot = new Autopilot();
     /** Where the autopilot wants the engines to push (world axes), or null to fly by hand. */
     private DVec3 steerTarget;
-    /**
-     * Visiting a ship that is blocks in its cell: that ship's blocks stand upright whichever way
-     * it really points, so the visitor is shown turned into the host's own frame (this turns the
-     * cell's axes into it). Null otherwise.
-     */
-    private Quaterniond displayFrame;
     /** A whole attitude the autopilot wants held (vessel to world axes), or null. */
     private Quaterniond steerAttitude;
     /** The push the autopilot wants from the RCS thrusters (world axes, blocks/s²), or null. */
@@ -286,10 +280,6 @@ public class VesselEntity extends Entity implements IEntityAdditionalSpawnData {
         this.owner = owner;
     }
 
-    /** See {@link #displayFrame}. */
-    void setDisplayFrame(Quaterniond frame) {
-        displayFrame = frame;
-    }
 
     /** The cell's axes as rows (for {@link #cellTurn}). */
     private double[] axisRows() {
@@ -352,8 +342,7 @@ public class VesselEntity extends Entity implements IEntityAdditionalSpawnData {
     }
 
     private void syncState() {
-        Quaterniond shown = displayFrame != null ? new Quaterniond(displayFrame).mul(orientation) : orientation;
-        entityData.set(ORIENTATION, new Quaternionf((float) shown.x, (float) shown.y, (float) shown.z, (float) shown.w));
+        entityData.set(ORIENTATION, new Quaternionf((float) orientation.x, (float) orientation.y, (float) orientation.z, (float) orientation.w));
         entityData.set(SPIN, new Vector3f((float) angularVelocity.x, (float) angularVelocity.y, (float) angularVelocity.z));
         entityData.set(STAMP, tickCount);
         if (orbital != null) {
@@ -1403,7 +1392,11 @@ public class VesselEntity extends Entity implements IEntityAdditionalSpawnData {
         org.joml.Matrix3d turn = orbital.advance(ServerUniverse.system(), clock.time(), thrust, gravityScale,
                 orbital.body().radius() + VesselTransfer.entryAltitude(orbital.body()));
         // The cell turns with the horizon as the vessel goes round; keep the vessel still in space.
-        orientation.premul(new Quaterniond().setFromNormalized(turn)).normalize();
+        // A ship that is blocks with nobody flying it (a station) turns with its cell instead, as
+        // a parked ship does: its blocks stand upright in it, and that's where it really points.
+        if (!(materialized() && pilot() == null && !autopilot.active() && controls.equals(VesselControls.IDLE))) {
+            orientation.premul(new Quaterniond().setFromNormalized(turn)).normalize();
+        }
         sendFlightToCrew();
 
         CelestialBody body = orbital.body();
@@ -1425,17 +1418,6 @@ public class VesselEntity extends Entity implements IEntityAdditionalSpawnData {
             double[] values = {state.position().x(), state.position().y(), state.position().z(),
                     state.velocity().x(), state.velocity().y(), state.velocity().z()};
             double[] axes = axisRows();
-            if (displayFrame != null) {
-                // Shown in the host's frame: so is everything round the crew, the sky included.
-                Quaterniond back = new Quaterniond(displayFrame).conjugate();
-                for (int i = 0; i < 3; i++) {
-                    Vector3d unit = back.transform(new Vector3d(i == 0 ? 1 : 0, i == 1 ? 1 : 0, i == 2 ? 1 : 0));
-                    DVec3 inertial = orbital.toInertial(unit.x, unit.y, unit.z);
-                    axes[i * 3] = inertial.x();
-                    axes[i * 3 + 1] = inertial.y();
-                    axes[i * 3 + 2] = inertial.z();
-                }
-            }
             message = new com.thepearlking.stevespace.network.VesselOrbitS2C(getId(), orbital.body().id(), orbital.time(),
                     values, axes, controls.throttle() <= 0, false);
         } else if (mapPosition != null) {
@@ -1452,7 +1434,9 @@ public class VesselEntity extends Entity implements IEntityAdditionalSpawnData {
         }
         if (materialized()) {
             for (Player player : playersAboard(48)) {
-                if (player instanceof net.minecraft.server.level.ServerPlayer sp) {
+                // (Not to someone in another ship close by: theirs tells them where they are.)
+                if (player instanceof net.minecraft.server.level.ServerPlayer sp
+                        && !(sp.getVehicle() instanceof VesselEntity other && other != this)) {
                     com.thepearlking.stevespace.network.SpaceNetwork.sendTo(sp, message);
                 }
             }

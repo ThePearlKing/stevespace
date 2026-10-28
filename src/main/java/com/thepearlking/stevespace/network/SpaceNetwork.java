@@ -89,6 +89,18 @@ public final class SpaceNetwork {
         CHANNEL.messageBuilder(AutopilotC2S.class, NetworkDirection.PLAY_TO_SERVER)
                 .encoder(AutopilotC2S::encode).decoder(AutopilotC2S::decode)
                 .consumerMainThread(AutopilotC2S::handle).add();
+        CHANNEL.messageBuilder(ShipRemoveC2S.class, NetworkDirection.PLAY_TO_SERVER)
+                .encoder(ShipRemoveC2S::encode).decoder(ShipRemoveC2S::decode)
+                .consumerMainThread(ShipRemoveC2S::handle).add();
+        CHANNEL.messageBuilder(ShipRemoveS2C.class, NetworkDirection.PLAY_TO_CLIENT)
+                .encoder(ShipRemoveS2C::encode).decoder(ShipRemoveS2C::decode)
+                .consumerMainThread(ShipRemoveS2C::handle).add();
+        CHANNEL.messageBuilder(FleetC2S.class, NetworkDirection.PLAY_TO_SERVER)
+                .encoder(FleetC2S::encode).decoder(FleetC2S::decode)
+                .consumerMainThread(FleetC2S::handle).add();
+        CHANNEL.messageBuilder(FleetS2C.class, NetworkDirection.PLAY_TO_CLIENT)
+                .encoder(FleetS2C::encode).decoder(FleetS2C::decode)
+                .consumerMainThread(FleetS2C::handle).add();
         CHANNEL.messageBuilder(DockC2S.class, NetworkDirection.PLAY_TO_SERVER)
                 .encoder(DockC2S::encode).decoder(DockC2S::decode)
                 .consumerMainThread(DockC2S::handle).add();

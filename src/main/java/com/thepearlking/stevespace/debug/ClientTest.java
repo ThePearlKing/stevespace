@@ -2089,6 +2089,19 @@ public final class ClientTest {
             ClientTest.holdScreen = true;
             mc.setScreen(new com.thepearlking.stevespace.client.gui.DockScreen(null));
         }, 60));
+        scenes.add(new Scene("dock_menu_pick", mc -> com.thepearlking.stevespace.client.gui.DockScreen.pickForTest(1), 30));
+        scenes.add(new Scene("dock_map", mc -> {
+            ClientTest.holdScreen = true;
+            mc.setScreen(new com.thepearlking.stevespace.client.gui.MapScreen());
+        }, 80));
+        scenes.add(new Scene("dock_remove", mc -> {
+            var own = com.thepearlking.stevespace.client.space.ClientFleet.shown().stream().filter(com.thepearlking.stevespace.client.space.ClientFleet.Ship::owned)
+                    .findFirst().orElse(null);
+            if (own != null) {
+                mc.setScreen(new com.thepearlking.stevespace.client.gui.RemoveShipScreen(null, own.id()));
+            }
+        }, 30));
+        scenes.add(new Scene("dock_remove_ready", mc -> { }, 120));
         scenes.add(new Scene("dock_autopilot", mc -> {
             ClientTest.holdScreen = true;
             mc.setScreen(new com.thepearlking.stevespace.client.gui.AutopilotScreen());
@@ -2106,6 +2119,68 @@ public final class ClientTest {
                 }
             });
         }, 20));
+        // Flying a real docking with a station, seen from behind the ship.
+        scenes.add(new Scene("dockfly_setup", mc -> {
+            command(mc, "gamemode creative @a");
+            IntegratedServer server = mc.getSingleplayerServer();
+            server.execute(() -> {
+                var space = server.getLevel(com.thepearlking.stevespace.world.SpaceDimension.KEY);
+                var earth = com.thepearlking.stevespace.universe.ServerUniverse.system().earth();
+                double r = earth.radius() + 3200;
+                double mu = earth.mu() * com.thepearlking.stevespace.config.SpaceConfig.GRAVITY_SCALE.get();
+                java.util.function.DoubleFunction<com.thepearlking.stevespace.universe.StateVector> at = a -> new com.thepearlking.stevespace.universe.StateVector(
+                        new com.thepearlking.stevespace.universe.DVec3(r * Math.cos(a), r * Math.sin(a), 0),
+                        new com.thepearlking.stevespace.universe.DVec3(-Math.sin(a), Math.cos(a), 0).scale(Math.sqrt(mu / r)));
+                var hull = com.thepearlking.stevespace.registry.ModBlocks.HULL_WHITE.get().defaultBlockState();
+                var port = com.thepearlking.stevespace.registry.ModBlocks.DOCKING_PORT.get().defaultBlockState();
+                var station = new java.util.HashMap<net.minecraft.core.BlockPos, net.minecraft.world.level.block.state.BlockState>();
+                for (int y = 0; y < 4; y++) {
+                    station.put(new net.minecraft.core.BlockPos(0, y, 0), hull);
+                    station.put(new net.minecraft.core.BlockPos(1, y, 0), hull);
+                }
+                station.put(new net.minecraft.core.BlockPos(2, 2, 0), port.setValue(com.thepearlking.stevespace.block.DockingPortBlock.FACING,
+                        net.minecraft.core.Direction.EAST));
+                var st = com.thepearlking.stevespace.vessel.VesselEntity.spawnInOrbit(space,
+                        new com.thepearlking.stevespace.vessel.VesselStructure(station, new java.util.HashMap<>()), earth, at.apply(2.0), new org.joml.Quaterniond());
+                st.setCustomName(net.minecraft.network.chat.Component.literal("Outpost"));
+                st.park(null);
+                var ship = new java.util.HashMap<net.minecraft.core.BlockPos, net.minecraft.world.level.block.state.BlockState>();
+                ship.put(new net.minecraft.core.BlockPos(0, 0, 0), com.thepearlking.stevespace.registry.ModBlocks.ROCKET_ENGINE.get().defaultBlockState());
+                ship.put(new net.minecraft.core.BlockPos(0, 1, 0), com.thepearlking.stevespace.registry.ModBlocks.PROPELLANT_TANK.get().defaultBlockState());
+                ship.put(new net.minecraft.core.BlockPos(0, 2, 0), com.thepearlking.stevespace.registry.ModBlocks.PILOT_SEAT.get().defaultBlockState());
+                ship.put(new net.minecraft.core.BlockPos(0, 3, 0), hull);
+                ship.put(new net.minecraft.core.BlockPos(0, 4, 0), port);
+                for (var d : new net.minecraft.core.Direction[]{net.minecraft.core.Direction.NORTH, net.minecraft.core.Direction.SOUTH,
+                        net.minecraft.core.Direction.EAST, net.minecraft.core.Direction.WEST}) {
+                    ship.put(new net.minecraft.core.BlockPos(0, 1, 0).relative(d), com.thepearlking.stevespace.registry.ModBlocks.RCS_THRUSTER.get()
+                            .defaultBlockState().setValue(com.thepearlking.stevespace.block.RcsThrusterBlock.FACING, d));
+                }
+                var mine = com.thepearlking.stevespace.vessel.VesselEntity.spawnInOrbit(space,
+                        new com.thepearlking.stevespace.vessel.VesselStructure(ship, new java.util.HashMap<>()), earth, at.apply(2.0 - 300 / r),
+                        new org.joml.Quaterniond());
+                mine.fillTanks();
+                var player = server.getPlayerList().getPlayers().get(0);
+                player.teleportTo(space, mine.getX(), mine.getY() + 1, mine.getZ(), java.util.Set.of(), 0, 0);
+                player.startRiding(mine, true);
+            });
+            mc.options.setCameraType(net.minecraft.client.CameraType.THIRD_PERSON_BACK);
+        }, 60));
+        scenes.add(new Scene("dockfly_go", mc -> {
+            IntegratedServer server = mc.getSingleplayerServer();
+            server.execute(() -> {
+                var player = server.getPlayerList().getPlayers().get(0);
+                var list = com.thepearlking.stevespace.vessel.DockList.build(player);
+                var entry = list.ships().stream().filter(e -> e.name().contains("Outpost")).findFirst().orElse(null);
+                if (entry != null && !list.mine().isEmpty()) {
+                    com.thepearlking.stevespace.vessel.VesselServer.onDock(player, entry.id(), entry.cell(), list.mine().get(0).pos(),
+                            entry.ports().get(0).pos());
+                }
+            });
+        }, 600));
+        for (String step : new String[]{"b", "c", "d", "e", "f"}) {
+            scenes.add(new Scene("dockfly_" + step, mc -> { }, 600));
+        }
+        scenes.add(new Scene("dockfly_done", mc -> mc.options.setCameraType(net.minecraft.client.CameraType.FIRST_PERSON), 5));
         // The new blocks on a little hull: RCS clusters, a docking port sharing power (red) and one not.
         scenes.add(new Scene("rcs_blocks_go", mc -> {
             command(mc, "gamemode spectator @a");

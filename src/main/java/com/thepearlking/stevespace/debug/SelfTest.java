@@ -61,6 +61,10 @@ public final class SelfTest {
                 DockTests.schedule(server);
                 return;
             }
+            if ("dockpower".equals(System.getenv("STEVESPACE_SELFTEST_ONLY"))) {
+                DockTests.listAndPower(server);
+                return;
+            }
             if ("dockquick".equals(System.getenv("STEVESPACE_SELFTEST_ONLY"))) {
                 DockTests.dock(server, !"0".equals(System.getenv("STEVESPACE_RCS")), 0.3, 300, 0);
                 return;
@@ -2758,7 +2762,7 @@ public final class SelfTest {
         }
 
         /** Who's on the dock list, and power crossing a pair of docked ports only when both share. */
-        private static void listAndPower(MinecraftServer server) {
+        static void listAndPower(MinecraftServer server) {
             final net.minecraft.server.level.ServerPlayer[] pilot = new net.minecraft.server.level.ServerPlayer[1];
             final java.util.UUID[] ids = new java.util.UUID[3];
             later(server, 2, () -> {
@@ -2807,6 +2811,9 @@ public final class SelfTest {
                     }
                 }
                 at[0] = VesselTests.clearArea(level, x, z).above(4);
+                for (int i = 0; i < 4; i++) {
+                    level.setBlockAndUpdate(at[0].east(i), net.minecraft.world.level.block.Blocks.AIR.defaultBlockState()); // what earlier runs left
+                }
                 level.setBlockAndUpdate(at[0], com.thepearlking.stevespace.registry.ModBlocks.CREATIVE_POWER.get().defaultBlockState());
                 level.setBlockAndUpdate(at[0].east(), port(net.minecraft.core.Direction.EAST));
                 level.setBlockAndUpdate(at[0].east(2), port(net.minecraft.core.Direction.WEST));
@@ -2814,6 +2821,9 @@ public final class SelfTest {
             });
             java.util.function.IntSupplier stored = () -> level.getBlockEntity(at[0].east(3))
                     instanceof com.thepearlking.stevespace.energy.PowerBlockEntity p ? p.buffer().getEnergyStored() : -1;
+            later(server, 1, () -> StevesSpace.LOGGER.info("[SelfTest] power: battery {} at start, around {}", stored.getAsInt(),
+                    java.util.stream.IntStream.range(-1, 5).mapToObj(i -> level.getBlockState(at[0].east(i)).getBlock().getName().getString())
+                            .toList()));
             later(server, 60, () -> {
                 check("docked-ports-keep-power-apart", stored.getAsInt() == 0, "battery " + stored.getAsInt());
                 var a = level.getBlockState(at[0].east());

@@ -23,7 +23,7 @@ public final class Rendezvous {
     /** Farther than this, it leaves again. */
     static final double LEAVE = 260;
     /** Docking ports must meet within this distance (blocks) and this closing speed (m/s). */
-    static final double DOCK_DISTANCE = 0.6;
+    static final double DOCK_DISTANCE = 0.8;
     static final double DOCK_SPEED = 1.0;
 
     private Rendezvous() {
@@ -227,23 +227,11 @@ public final class Rendezvous {
         return position.sub(h.state().position());
     }
 
-    /**
-     * Where a visitor sits in its host's cell: its real offset, in the host's axes (or, when the
-     * host is blocks, in the frame its upright blocks stand in).
-     */
+    /** Where a visitor sits in its host's cell: its real offset, in the host's axes. */
     static Vec3 spot(VesselEntity v, VesselEntity host) {
         OrbitalFlight h = host.orbital();
         DVec3 offset = offset(v, host);
-        Vector3d rel = new Vector3d(offset.dot(h.axisX()), offset.dot(h.axisY()), offset.dot(h.axisZ()));
-        if (host.materialized()) {
-            host.orientationCopy().conjugate().transform(rel);
-        }
-        return new Vec3(host.getX() + rel.x, host.getY() + rel.y, host.getZ() + rel.z);
-    }
-
-    /** The turn from a host's cell axes into the frame its blocks stand in (null if it isn't blocks). */
-    private static org.joml.Quaterniond frameOf(VesselEntity host) {
-        return host.materialized() ? host.orientationCopy().conjugate() : null;
+        return new Vec3(host.getX() + offset.dot(h.axisX()), host.getY() + offset.dot(h.axisY()), host.getZ() + offset.dot(h.axisZ()));
     }
 
     /**
@@ -258,7 +246,6 @@ public final class Rendezvous {
             return false;
         }
         v.setPos(at.x, at.y, at.z);
-        v.setDisplayFrame(frameOf(host));
         return true;
     }
 
@@ -273,7 +260,6 @@ public final class Rendezvous {
         int oldCell = v.orbital().cell();
         v.orbital().setCell(host.orbital().cell(), host.getUUID());
         v.setPos(at.x, at.y, at.z);
-        v.setDisplayFrame(frameOf(host));
         SpaceCells.get(space.getServer()).free(oldCell);
         com.thepearlking.stevespace.StevesSpace.LOGGER.info("Vessel {} joins {}'s cell ({} blocks apart)", v.getId(), host.getId(),
                 String.format(java.util.Locale.ROOT, "%.1f", separation(v, host)));
@@ -289,7 +275,6 @@ public final class Rendezvous {
         }
         int cell = cells.allocate();
         v.orbital().setCell(cell, null);
-        v.setDisplayFrame(null);
         v.teleportTo(centre.x, centre.y, centre.z);
         return true;
     }

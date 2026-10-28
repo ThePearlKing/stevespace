@@ -230,6 +230,7 @@ public class MapScreen extends Screen {
         }
         addFlightWidgets();
         addWarpWidgets();
+        addFleetToggles();
     }
 
     // ---------------------------------------------------------------------------------------
@@ -237,6 +238,83 @@ public class MapScreen extends Screen {
     // ---------------------------------------------------------------------------------------
 
     private static final int WARP_W = 196;
+    private static final int OWN_COLOR = 0xFF7FE0A8;
+    private static final int OTHER_COLOR = 0xFFE6AD45;
+    /** Ticks until the ships shown on the map are asked for again. */
+    private int fleetIn;
+
+    /** Bottom left: show or hide your other ships, and other people's (with radios), on the map. */
+    private void addFleetToggles() {
+        int y = height - 50; // above the hint along the bottom
+        addRenderableWidget(net.minecraft.client.gui.components.Button.builder(fleetLabel(true), b -> {
+            com.thepearlking.stevespace.client.space.ClientFleet.showOwn = !com.thepearlking.stevespace.client.space.ClientFleet.showOwn;
+            b.setMessage(fleetLabel(true));
+        }).bounds(8, y, 96, 18).build());
+        addRenderableWidget(net.minecraft.client.gui.components.Button.builder(fleetLabel(false), b -> {
+            com.thepearlking.stevespace.client.space.ClientFleet.showOthers = !com.thepearlking.stevespace.client.space.ClientFleet.showOthers;
+            b.setMessage(fleetLabel(false));
+        }).bounds(108, y, 96, 18).build());
+    }
+
+    private static Component fleetLabel(boolean own) {
+        boolean on = own ? com.thepearlking.stevespace.client.space.ClientFleet.showOwn : com.thepearlking.stevespace.client.space.ClientFleet.showOthers;
+        return Component.translatable(own ? "screen.stevespace.map.my_ships" : "screen.stevespace.map.radio_ships")
+                .withStyle(s -> s.withColor(on ? (own ? OWN_COLOR : OTHER_COLOR) & 0xFFFFFF : 0x777777));
+    }
+
+    /** The other ships round the body in view: their orbits, and a marker and name where each is. */
+    private void drawFleetPaths(Matrix4f matrix, double t) {
+        for (var ship : com.thepearlking.stevespace.client.space.ClientFleet.shown()) {
+            if (!ship.body().id().equals(focus.id()) || ship.orbit().eccentricity() >= 1) {
+                continue;
+            }
+            double period = ship.orbit().period(ship.mu());
+            List<DVec3> points = new ArrayList<>();
+            for (int k = 0; k <= 96; k++) {
+                points.add(ship.stateAt(t + period * k / 96.0).position());
+            }
+            int color = ship.owned() ? OWN_COLOR : OTHER_COLOR;
+            polyline(matrix, points, (0x90 << 24) | (color & 0xFFFFFF), 1.0f);
+        }
+    }
+
+    /** The shown ship whose marker is under the mouse, or null. */
+    private com.thepearlking.stevespace.client.space.ClientFleet.Ship fleetShipAt(double mouseX, double mouseY) {
+        double t = ClientUniverse.time();
+        for (var ship : com.thepearlking.stevespace.client.space.ClientFleet.shown()) {
+            if (focus == null || !ship.body().id().equals(focus.id())) {
+                continue;
+            }
+            float[] p = project(ship.stateAt(t).position());
+            if (p[2] > 0 && Math.hypot(p[0] - mouseX, p[1] - mouseY) < 7) {
+                return ship;
+            }
+        }
+        return null;
+    }
+
+    private void drawFleetMarkers(GuiGraphics g, double t) {
+        for (var ship : com.thepearlking.stevespace.client.space.ClientFleet.shown()) {
+            if (!ship.body().id().equals(focus.id())) {
+                continue;
+            }
+            DVec3 at = ship.stateAt(t).position();
+            float[] p = project(at);
+            if (p[2] <= 0) {
+                continue;
+            }
+            int x = (int) p[0];
+            int y = (int) p[1];
+            boolean behind = hidden(at);
+            int color = ship.owned() ? OWN_COLOR : OTHER_COLOR;
+            if (behind) {
+                color = (0x70 << 24) | (color & 0xFFFFFF);
+            }
+            g.fill(x - 1, y - 2, x + 2, y + 3, color);
+            g.fill(x - 2, y - 1, x + 3, y + 2, color);
+            g.drawString(font, ship.name(), x + 6, y - 4, color, false);
+        }
+    }
 
     private void addWarpWidgets() {
         int x = width / 2 - WARP_W / 2;
@@ -532,6 +610,10 @@ public class MapScreen extends Screen {
 
     @Override
     public void tick() {
+        if (--fleetIn <= 0) {
+            com.thepearlking.stevespace.network.SpaceNetwork.sendToServer(new com.thepearlking.stevespace.network.FleetC2S());
+            fleetIn = 40;
+        }
         if (--recomputeIn <= 0) {
             updateVessel();
             recomputeIn = 5;
@@ -593,6 +675,12 @@ public class MapScreen extends Screen {
         if (button == 1 && Math.hypot(mouseX - pressX, mouseY - pressY) < 4) {
             if (spotPicking) {
                 spotPicking = false; // right-click: stop picking a spot
+                return true;
+            }
+            // Right-click on one of your other ships: remove it (it asks first).
+            var ship = fleetShipAt(mouseX, mouseY);
+            if (ship != null && ship.owned()) {
+                Minecraft.getInstance().setScreen(new RemoveShipScreen(this, ship.id()));
                 return true;
             }
             // Right-click on something: look at it.
@@ -1184,6 +1272,8 @@ public class MapScreen extends Screen {
             }
         }
 
+        drawFleetPaths(matrix, t);
+
         // The vessel's path, piece by piece.
         for (int i = 0; i < trajectory.size(); i++) {
             TrajectoryPredictor.Segment segment = trajectory.get(i);
@@ -1267,6 +1357,7 @@ public class MapScreen extends Screen {
             g.renderOutline(x - 4, y - 4, 9, 9, behind ? (0x80 << 24) | (GREEN & 0xFFFFFF) : GREEN);
             g.drawString(font, Minecraft.getInstance().player.getName(), x + 7, y - 4, behind ? LABEL : TEXT, false);
         }
+        drawFleetMarkers(g, t);
         if (targetState != null) {
             float[] p = project(targetState.position());
             int x = (int) p[0];

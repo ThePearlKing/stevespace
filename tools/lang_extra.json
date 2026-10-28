@@ -523,5 +523,16 @@
   "hud.stevespace.autopilot.dock_in": "Docking",
   "stevespace.autopilot.dock_lost": "Can't find that ship any more",
   "stevespace.docking_port.sharing_on": "Power sharing on (both docked ports need it)",
-  "stevespace.docking_port.sharing_off": "Power sharing off"
+  "stevespace.docking_port.sharing_off": "Power sharing off",
+  "screen.stevespace.dock.your_ship": "Your ship",
+  "screen.stevespace.map.my_ships": "My ships",
+  "screen.stevespace.map.radio_ships": "Radio ships",
+  "screen.stevespace.remove_ship": "Remove ship",
+  "screen.stevespace.remove_ship.sure": "Remove this ship? Are you sure?",
+  "screen.stevespace.remove_ship.port": "It has a docking port (it may be part of a station)",
+  "screen.stevespace.remove_ship.no_port": "It has no docking port",
+  "screen.stevespace.remove_ship.gone": "It will be gone for good.",
+  "screen.stevespace.remove_ship.wait": "Yes (%s)",
+  "stevespace.ship.remove.aboard": "Someone is aboard that ship",
+  "stevespace.ship.remove.done": "%s removed"
 }
