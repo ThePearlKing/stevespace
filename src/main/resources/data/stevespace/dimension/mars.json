@@ -1,0 +1,7 @@
+{
+  "type": "stevespace:mars",
+  "generator": {
+    "type": "stevespace:planet",
+    "body": "mars"
+  }
+}

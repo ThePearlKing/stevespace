@@ -1,0 +1,8 @@
+{
+  "parent": "minecraft:block/orientable",
+  "textures": {
+    "front": "stevespace:block/rc_function_4",
+    "side": "stevespace:block/instrument_side",
+    "top": "stevespace:block/instrument_top"
+  }
+}

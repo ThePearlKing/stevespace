@@ -1,0 +1,30 @@
+{
+  "variants": {
+    "facing=up": {
+      "model": "stevespace:block/docking_port"
+    },
+    "facing=down": {
+      "model": "stevespace:block/docking_port",
+      "x": 180
+    },
+    "facing=north": {
+      "model": "stevespace:block/docking_port",
+      "x": 90
+    },
+    "facing=south": {
+      "model": "stevespace:block/docking_port",
+      "x": 90,
+      "y": 180
+    },
+    "facing=east": {
+      "model": "stevespace:block/docking_port",
+      "x": 90,
+      "y": 90
+    },
+    "facing=west": {
+      "model": "stevespace:block/docking_port",
+      "x": 90,
+      "y": 270
+    }
+  }
+}

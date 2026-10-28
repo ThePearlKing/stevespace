@@ -1,0 +1,24 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "category": "building",
+  "pattern": [
+    "TBT",
+    "BRB",
+    "TBT"
+  ],
+  "key": {
+    "T": {
+      "item": "stevespace:titanium"
+    },
+    "B": {
+      "item": "stevespace:battery"
+    },
+    "R": {
+      "item": "minecraft:redstone_block"
+    }
+  },
+  "result": {
+    "id": "stevespace:large_battery",
+    "count": 1
+  }
+}

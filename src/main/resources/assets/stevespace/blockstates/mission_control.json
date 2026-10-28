@@ -1,0 +1,19 @@
+{
+  "variants": {
+    "facing=north": {
+      "model": "stevespace:block/mission_control"
+    },
+    "facing=east": {
+      "model": "stevespace:block/mission_control",
+      "y": 90
+    },
+    "facing=south": {
+      "model": "stevespace:block/mission_control",
+      "y": 180
+    },
+    "facing=west": {
+      "model": "stevespace:block/mission_control",
+      "y": 270
+    }
+  }
+}

@@ -1,0 +1,21 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "category": "equipment",
+  "pattern": [
+    "W W",
+    "WTW",
+    "WWW"
+  ],
+  "key": {
+    "W": {
+      "item": "minecraft:white_wool"
+    },
+    "T": {
+      "item": "stevespace:propellant_tank"
+    }
+  },
+  "result": {
+    "id": "stevespace:space_suit",
+    "count": 1
+  }
+}

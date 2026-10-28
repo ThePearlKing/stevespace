@@ -1,0 +1,19 @@
+{
+  "variants": {
+    "facing=north": {
+      "model": "stevespace:block/oxygen_generator"
+    },
+    "facing=east": {
+      "model": "stevespace:block/oxygen_generator",
+      "y": 90
+    },
+    "facing=south": {
+      "model": "stevespace:block/oxygen_generator",
+      "y": 180
+    },
+    "facing=west": {
+      "model": "stevespace:block/oxygen_generator",
+      "y": 270
+    }
+  }
+}

@@ -1,0 +1,7 @@
+{
+  "type": "stevespace:pluto",
+  "generator": {
+    "type": "stevespace:planet",
+    "body": "pluto"
+  }
+}

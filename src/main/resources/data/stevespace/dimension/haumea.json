@@ -1,0 +1,7 @@
+{
+  "type": "stevespace:haumea",
+  "generator": {
+    "type": "stevespace:planet",
+    "body": "haumea"
+  }
+}

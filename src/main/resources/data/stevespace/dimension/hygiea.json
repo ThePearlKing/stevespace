@@ -1,0 +1,7 @@
+{
+  "type": "stevespace:hygiea",
+  "generator": {
+    "type": "stevespace:planet",
+    "body": "hygiea"
+  }
+}

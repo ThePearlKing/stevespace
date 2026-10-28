@@ -1,0 +1,7 @@
+{
+  "type": "stevespace:acheron",
+  "generator": {
+    "type": "stevespace:planet",
+    "body": "acheron"
+  }
+}

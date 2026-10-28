@@ -1,0 +1,7 @@
+{
+  "type": "stevespace:ganymede",
+  "generator": {
+    "type": "stevespace:planet",
+    "body": "ganymede"
+  }
+}

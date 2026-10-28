@@ -1,0 +1,19 @@
+{
+  "variants": {
+    "facing=north": {
+      "model": "stevespace:block/flight_display"
+    },
+    "facing=east": {
+      "model": "stevespace:block/flight_display",
+      "y": 90
+    },
+    "facing=south": {
+      "model": "stevespace:block/flight_display",
+      "y": 180
+    },
+    "facing=west": {
+      "model": "stevespace:block/flight_display",
+      "y": 270
+    }
+  }
+}

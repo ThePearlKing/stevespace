@@ -1,0 +1,8 @@
+{
+  "parent": "minecraft:block/orientable",
+  "textures": {
+    "front": "stevespace:block/flight_display_front",
+    "side": "stevespace:block/instrument_side",
+    "top": "stevespace:block/instrument_top"
+  }
+}

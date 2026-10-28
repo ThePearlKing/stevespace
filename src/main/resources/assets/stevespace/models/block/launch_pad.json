@@ -1,0 +1,8 @@
+{
+  "parent": "minecraft:block/cube_bottom_top",
+  "textures": {
+    "top": "stevespace:block/launch_pad",
+    "side": "stevespace:block/launch_pad_side",
+    "bottom": "stevespace:block/launch_pad_side"
+  }
+}

@@ -1,0 +1,15 @@
+{
+  "replace": false,
+  "values": [
+    "stevespace:lunar_ice",
+    "stevespace:mercury_ice",
+    "stevespace:martian_ice",
+    "stevespace:europan_ice",
+    "stevespace:deep_ice",
+    "stevespace:bright_ice",
+    "stevespace:callistan_ice",
+    "stevespace:enceladus_ice",
+    "stevespace:stripe_ice",
+    "stevespace:ice_bedrock"
+  ]
+}

@@ -1,0 +1,21 @@
+{
+    "vertex": "stevespace:sun",
+    "fragment": "stevespace:sun",
+    "samplers": [],
+    "uniforms": [
+        { "name": "ModelViewMat", "type": "matrix4x4", "count": 16, "values": [ 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0 ] },
+        { "name": "ProjMat", "type": "matrix4x4", "count": 16, "values": [ 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0 ] },
+        { "name": "ColorModulator", "type": "float", "count": 4, "values": [ 1.0, 1.0, 1.0, 1.0 ] },
+        { "name": "SunDir", "type": "float", "count": 3, "values": [ 0.0, 0.0, -1.0 ] },
+        { "name": "SinRadius", "type": "float", "count": 1, "values": [ 0.1 ] },
+        { "name": "Spin", "type": "float", "count": 1, "values": [ 0.0 ] },
+        { "name": "AnimTime", "type": "float", "count": 1, "values": [ 0.0 ] },
+        { "name": "Activity", "type": "float", "count": 1, "values": [ 0.5 ] },
+        { "name": "Haze", "type": "float", "count": 1, "values": [ 0.0 ] },
+        { "name": "ViewToSun", "type": "matrix4x4", "count": 16, "values": [ 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0 ] },
+        { "name": "SpotsA", "type": "matrix4x4", "count": 16, "values": [ 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0 ] },
+        { "name": "SpotsB", "type": "matrix4x4", "count": 16, "values": [ 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0 ] },
+        { "name": "SpotsC", "type": "matrix4x4", "count": 16, "values": [ 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0 ] },
+        { "name": "Flares", "type": "matrix4x4", "count": 16, "values": [ 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0 ] }
+    ]
+}

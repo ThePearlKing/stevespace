@@ -1,0 +1,7 @@
+{
+  "parent": "minecraft:block/cube_column",
+  "textures": {
+    "side": "stevespace:block/rtg_side",
+    "end": "stevespace:block/rtg_top"
+  }
+}

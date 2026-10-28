@@ -1,0 +1,27 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "category": "building",
+  "pattern": [
+    "IUI",
+    "BTB",
+    "IUI"
+  ],
+  "key": {
+    "I": {
+      "item": "minecraft:iron_ingot"
+    },
+    "U": {
+      "item": "stevespace:uraninite"
+    },
+    "B": {
+      "item": "minecraft:iron_bars"
+    },
+    "T": {
+      "item": "stevespace:titanium"
+    }
+  },
+  "result": {
+    "id": "stevespace:rtg",
+    "count": 1
+  }
+}

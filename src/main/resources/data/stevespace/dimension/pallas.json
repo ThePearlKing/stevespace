@@ -1,0 +1,7 @@
+{
+  "type": "stevespace:pallas",
+  "generator": {
+    "type": "stevespace:planet",
+    "body": "pallas"
+  }
+}

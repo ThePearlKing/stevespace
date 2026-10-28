@@ -1,0 +1,15 @@
+{
+    "vertex": "stevespace:planet",
+    "fragment": "stevespace:planet_atmosphere",
+    "samplers": [],
+    "uniforms": [
+        { "name": "ModelViewMat", "type": "matrix4x4", "count": 16, "values": [ 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0 ] },
+        { "name": "ProjMat", "type": "matrix4x4", "count": 16, "values": [ 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0 ] },
+        { "name": "SunDir", "type": "float", "count": 3, "values": [ 0.0, 1.0, 0.0 ] },
+        { "name": "CameraPos", "type": "float", "count": 3, "values": [ 0.0, 0.0, 2.0 ] },
+        { "name": "AtmosphereColor", "type": "float", "count": 3, "values": [ 0.45, 0.65, 1.0 ] },
+        { "name": "Strength", "type": "float", "count": 1, "values": [ 1.0 ] },
+        { "name": "ShellRadius", "type": "float", "count": 1, "values": [ 1.02 ] },
+        { "name": "Glow", "type": "float", "count": 1, "values": [ 0.0 ] }
+    ]
+}

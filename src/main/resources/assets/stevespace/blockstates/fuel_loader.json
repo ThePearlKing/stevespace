@@ -1,0 +1,19 @@
+{
+  "variants": {
+    "facing=north": {
+      "model": "stevespace:block/fuel_loader"
+    },
+    "facing=east": {
+      "model": "stevespace:block/fuel_loader",
+      "y": 90
+    },
+    "facing=south": {
+      "model": "stevespace:block/fuel_loader",
+      "y": 180
+    },
+    "facing=west": {
+      "model": "stevespace:block/fuel_loader",
+      "y": 270
+    }
+  }
+}

@@ -1,0 +1,24 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "category": "building",
+  "pattern": [
+    "TGT",
+    "GSG",
+    "TGT"
+  ],
+  "key": {
+    "T": {
+      "item": "stevespace:titanium"
+    },
+    "G": {
+      "item": "minecraft:gold_ingot"
+    },
+    "S": {
+      "item": "stevespace:space_suit"
+    }
+  },
+  "result": {
+    "id": "stevespace:heat_shielded_space_suit",
+    "count": 1
+  }
+}

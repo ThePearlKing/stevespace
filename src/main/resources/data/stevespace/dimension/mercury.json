@@ -1,0 +1,7 @@
+{
+  "type": "stevespace:mercury",
+  "generator": {
+    "type": "stevespace:planet",
+    "body": "mercury"
+  }
+}

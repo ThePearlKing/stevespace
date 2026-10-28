@@ -1,0 +1,152 @@
+{
+  "parent": "minecraft:block/block",
+  "textures": {
+    "particle": "stevespace:block/flag_cloth",
+    "cloth": "stevespace:block/flag_cloth",
+    "pole": "stevespace:block/flag_pole"
+  },
+  "elements": [
+    {
+      "from": [
+        7.5,
+        0,
+        7.5
+      ],
+      "to": [
+        8.5,
+        29,
+        8.5
+      ],
+      "faces": {
+        "north": {
+          "texture": "#pole",
+          "uv": [
+            7,
+            0,
+            8,
+            16
+          ]
+        },
+        "south": {
+          "texture": "#pole",
+          "uv": [
+            7,
+            0,
+            8,
+            16
+          ]
+        },
+        "east": {
+          "texture": "#pole",
+          "uv": [
+            7,
+            0,
+            8,
+            16
+          ]
+        },
+        "west": {
+          "texture": "#pole",
+          "uv": [
+            7,
+            0,
+            8,
+            16
+          ]
+        },
+        "up": {
+          "texture": "#pole",
+          "uv": [
+            7,
+            7,
+            8,
+            8
+          ]
+        },
+        "down": {
+          "texture": "#pole",
+          "uv": [
+            7,
+            7,
+            8,
+            8
+          ]
+        }
+      }
+    },
+    {
+      "from": [
+        8.5,
+        18,
+        7.75
+      ],
+      "to": [
+        24.5,
+        28,
+        8.25
+      ],
+      "faces": {
+        "north": {
+          "texture": "#cloth",
+          "uv": [
+            0,
+            3,
+            16,
+            13
+          ],
+          "tintindex": 1
+        },
+        "south": {
+          "texture": "#cloth",
+          "uv": [
+            16,
+            3,
+            0,
+            13
+          ],
+          "tintindex": 1
+        },
+        "east": {
+          "texture": "#cloth",
+          "uv": [
+            0,
+            3,
+            1,
+            13
+          ],
+          "tintindex": 1
+        },
+        "west": {
+          "texture": "#cloth",
+          "uv": [
+            0,
+            3,
+            1,
+            13
+          ],
+          "tintindex": 1
+        },
+        "up": {
+          "texture": "#cloth",
+          "uv": [
+            0,
+            3,
+            16,
+            4
+          ],
+          "tintindex": 1
+        },
+        "down": {
+          "texture": "#cloth",
+          "uv": [
+            0,
+            12,
+            16,
+            13
+          ],
+          "tintindex": 1
+        }
+      }
+    }
+  ]
+}

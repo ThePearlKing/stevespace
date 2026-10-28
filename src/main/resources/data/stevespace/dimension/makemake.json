@@ -1,0 +1,7 @@
+{
+  "type": "stevespace:makemake",
+  "generator": {
+    "type": "stevespace:planet",
+    "body": "makemake"
+  }
+}

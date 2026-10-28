@@ -1,0 +1,7 @@
+{
+  "type": "minecraft:flat_cache",
+  "argument": {
+    "type": "stevespace:earth_continents",
+    "seed_noise": "minecraft:continentalness"
+  }
+}

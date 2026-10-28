@@ -1,0 +1,7 @@
+{
+  "type": "stevespace:europa",
+  "generator": {
+    "type": "stevespace:planet",
+    "body": "europa"
+  }
+}

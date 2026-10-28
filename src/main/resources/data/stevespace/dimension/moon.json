@@ -1,0 +1,7 @@
+{
+  "type": "stevespace:moon",
+  "generator": {
+    "type": "stevespace:planet",
+    "body": "moon"
+  }
+}

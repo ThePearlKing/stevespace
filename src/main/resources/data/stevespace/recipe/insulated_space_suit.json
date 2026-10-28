@@ -1,0 +1,24 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "category": "building",
+  "pattern": [
+    "AWA",
+    "WSW",
+    "AWA"
+  ],
+  "key": {
+    "A": {
+      "item": "stevespace:aerogel"
+    },
+    "W": {
+      "item": "minecraft:white_wool"
+    },
+    "S": {
+      "item": "stevespace:space_suit"
+    }
+  },
+  "result": {
+    "id": "stevespace:insulated_space_suit",
+    "count": 1
+  }
+}

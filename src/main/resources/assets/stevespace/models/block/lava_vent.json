@@ -1,0 +1,8 @@
+{
+  "parent": "minecraft:block/cube_bottom_top",
+  "textures": {
+    "top": "stevespace:block/lava_vent",
+    "side": "stevespace:block/ionian_basalt",
+    "bottom": "stevespace:block/ionian_basalt"
+  }
+}

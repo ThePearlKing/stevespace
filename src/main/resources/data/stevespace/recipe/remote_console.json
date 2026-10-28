@@ -1,0 +1,30 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "category": "building",
+  "pattern": [
+    "IGI",
+    "LQL",
+    "IRI"
+  ],
+  "key": {
+    "I": {
+      "item": "minecraft:iron_ingot"
+    },
+    "G": {
+      "item": "minecraft:glass_pane"
+    },
+    "L": {
+      "item": "minecraft:lever"
+    },
+    "Q": {
+      "item": "minecraft:comparator"
+    },
+    "R": {
+      "item": "minecraft:lightning_rod"
+    }
+  },
+  "result": {
+    "id": "stevespace:remote_console",
+    "count": 1
+  }
+}

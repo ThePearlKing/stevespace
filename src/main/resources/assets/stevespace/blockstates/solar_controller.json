@@ -1,0 +1,19 @@
+{
+  "variants": {
+    "facing=north": {
+      "model": "stevespace:block/solar_controller"
+    },
+    "facing=east": {
+      "model": "stevespace:block/solar_controller",
+      "y": 90
+    },
+    "facing=south": {
+      "model": "stevespace:block/solar_controller",
+      "y": 180
+    },
+    "facing=west": {
+      "model": "stevespace:block/solar_controller",
+      "y": 270
+    }
+  }
+}

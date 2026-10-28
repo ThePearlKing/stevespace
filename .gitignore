@@ -1,0 +1,12 @@
+.gradle/
+build/
+run/
+run-test/
+run-clienttest/
+*.log
+__pycache__/
+*.class
+.idea/
+*.iml
+out/
+.claude/

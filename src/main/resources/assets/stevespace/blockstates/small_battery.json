@@ -1,0 +1,19 @@
+{
+  "variants": {
+    "facing=north": {
+      "model": "stevespace:block/small_battery"
+    },
+    "facing=east": {
+      "model": "stevespace:block/small_battery",
+      "y": 90
+    },
+    "facing=south": {
+      "model": "stevespace:block/small_battery",
+      "y": 180
+    },
+    "facing=west": {
+      "model": "stevespace:block/small_battery",
+      "y": 270
+    }
+  }
+}

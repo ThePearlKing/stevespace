@@ -1,0 +1,21 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "category": "building",
+  "pattern": [
+    "CSC",
+    "SCS",
+    "CSC"
+  ],
+  "key": {
+    "C": {
+      "item": "stevespace:carbon"
+    },
+    "S": {
+      "item": "minecraft:string"
+    }
+  },
+  "result": {
+    "id": "stevespace:carbon_fibre",
+    "count": 2
+  }
+}

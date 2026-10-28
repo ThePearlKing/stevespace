@@ -1,0 +1,115 @@
+plugins {
+    id 'eclipse'
+    id 'idea'
+    id 'net.minecraftforge.gradle' version '[6.0.24,6.2)'
+}
+
+version = mod_version
+group = mod_group_id
+
+base {
+    archivesName = mod_id
+}
+
+java.toolchain.languageVersion = JavaLanguageVersion.of(21)
+
+minecraft {
+    mappings channel: mapping_channel, version: mapping_version
+
+    // 1.20.5+ runs with Mojang names in production, so no reobfuscation step is needed.
+    reobf = false
+    copyIdeResources = true
+
+    accessTransformer = file('src/main/resources/META-INF/accesstransformer.cfg')
+
+    runs {
+        configureEach {
+            workingDirectory project.file('run')
+            property 'forge.logging.markers', 'REGISTRIES'
+            property 'forge.logging.console.level', 'info'
+            mods {
+                "${mod_id}" {
+                    source sourceSets.main
+                }
+            }
+        }
+
+        client {
+            args '--width', '1600', '--height', '900'
+        }
+
+        server {
+            args '--nogui'
+        }
+
+        // Automated screenshots on a private virtual display (Xvfb :77), own folder, muted.
+        clientTest {
+            parent runs.client
+            workingDirectory project.file('run-clienttest')
+            environment 'STEVESPACE_CLIENTTEST', '1'
+            environment 'DISPLAY', ':77'
+        }
+
+        // Headless self-test in its own folder so it never touches the game's run/ folder.
+        serverTest {
+            parent runs.server
+            workingDirectory project.file('run-test')
+            environment 'STEVESPACE_SELFTEST', '1'
+        }
+    }
+}
+
+repositories {
+}
+
+dependencies {
+    minecraft "net.minecraftforge:forge:${minecraft_version}-${forge_version}"
+}
+
+// Plain-Java tools (planet map renderer etc.) that only need the pure world-gen code.
+tasks.register('planetMap', JavaExec) {
+    group = 'stevespace'
+    description = 'Renders top-down maps of the planet generators to build/planet-maps/'
+    classpath = sourceSets.main.runtimeClasspath
+    mainClass = 'com.thepearlking.stevespace.tools.PlanetMapTool'
+    args project.file('build/planet-maps').absolutePath
+}
+
+tasks.named('processResources', ProcessResources).configure {
+    var replaceProperties = [
+            minecraft_version: minecraft_version, minecraft_version_range: minecraft_version_range,
+            forge_version: forge_version, forge_version_range: forge_version_range,
+            loader_version_range: loader_version_range,
+            mod_id: mod_id, mod_name: mod_name, mod_license: mod_license, mod_version: mod_version,
+            mod_authors: mod_authors, mod_description: mod_description,
+    ]
+    inputs.properties replaceProperties
+
+    filesMatching(['META-INF/mods.toml', 'pack.mcmeta']) {
+        expand replaceProperties + [project: project]
+    }
+}
+
+tasks.named('jar', Jar).configure {
+    manifest {
+        attributes([
+                'Specification-Title'     : mod_id,
+                'Specification-Vendor'    : mod_authors,
+                'Specification-Version'   : '1',
+                'Implementation-Title'    : project.name,
+                'Implementation-Version'  : project.jar.archiveVersion,
+                'Implementation-Vendor'   : mod_authors
+        ])
+    }
+}
+
+tasks.withType(JavaCompile).configureEach {
+    options.encoding = 'UTF-8'
+    options.compilerArgs << '-Xlint:deprecation' << '-Xlint:unchecked'
+}
+
+sourceSets.each {
+    def dir = layout.buildDirectory.dir("sourcesSets/$it.name")
+    it.output.resourcesDir = dir
+    it.java.destinationDirectory = dir
+}

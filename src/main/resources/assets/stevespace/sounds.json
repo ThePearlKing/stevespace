@@ -1,0 +1,270 @@
+{
+  "engine": {
+    "subtitle": "subtitles.stevespace.engine",
+    "sounds": [
+      {
+        "name": "stevespace:engine_loop",
+        "stream": false
+      }
+    ]
+  },
+  "radio": {
+    "subtitle": "subtitles.stevespace.radio",
+    "sounds": [
+      {
+        "name": "stevespace:radio_squelch",
+        "stream": false
+      }
+    ]
+  },
+  "plasma_earth": {
+    "subtitle": "subtitles.stevespace.plasma",
+    "sounds": [
+      {
+        "name": "stevespace:plasma_earth",
+        "stream": false
+      }
+    ]
+  },
+  "plasma_jupiter": {
+    "subtitle": "subtitles.stevespace.plasma",
+    "sounds": [
+      {
+        "name": "stevespace:plasma_jupiter",
+        "stream": false
+      }
+    ]
+  },
+  "plasma_ganymede": {
+    "subtitle": "subtitles.stevespace.plasma",
+    "sounds": [
+      {
+        "name": "stevespace:plasma_ganymede",
+        "stream": false
+      }
+    ]
+  },
+  "plasma_saturn": {
+    "subtitle": "subtitles.stevespace.plasma",
+    "sounds": [
+      {
+        "name": "stevespace:plasma_saturn",
+        "stream": false
+      }
+    ]
+  },
+  "plasma_solar_wind": {
+    "subtitle": "subtitles.stevespace.plasma",
+    "sounds": [
+      {
+        "name": "stevespace:plasma_solar_wind",
+        "stream": false
+      }
+    ]
+  },
+  "geiger": {
+    "subtitle": "subtitles.stevespace.geiger",
+    "sounds": [
+      {
+        "name": "stevespace:geiger_click_1",
+        "stream": false
+      },
+      {
+        "name": "stevespace:geiger_click_2",
+        "stream": false
+      },
+      {
+        "name": "stevespace:geiger_click_3",
+        "stream": false
+      }
+    ]
+  },
+  "plasma_mercury": {
+    "subtitle": "subtitles.stevespace.plasma",
+    "sounds": [
+      {
+        "name": "stevespace:plasma_mercury",
+        "stream": false
+      }
+    ]
+  },
+  "plasma_venus": {
+    "subtitle": "subtitles.stevespace.plasma",
+    "sounds": [
+      {
+        "name": "stevespace:plasma_venus",
+        "stream": false
+      }
+    ]
+  },
+  "plasma_moon": {
+    "subtitle": "subtitles.stevespace.plasma",
+    "sounds": [
+      {
+        "name": "stevespace:plasma_moon",
+        "stream": false
+      }
+    ]
+  },
+  "plasma_mars": {
+    "subtitle": "subtitles.stevespace.plasma",
+    "sounds": [
+      {
+        "name": "stevespace:plasma_mars",
+        "stream": false
+      }
+    ]
+  },
+  "plasma_io": {
+    "subtitle": "subtitles.stevespace.plasma",
+    "sounds": [
+      {
+        "name": "stevespace:plasma_io",
+        "stream": false
+      }
+    ]
+  },
+  "plasma_europa": {
+    "subtitle": "subtitles.stevespace.plasma",
+    "sounds": [
+      {
+        "name": "stevespace:plasma_europa",
+        "stream": false
+      }
+    ]
+  },
+  "plasma_callisto": {
+    "subtitle": "subtitles.stevespace.plasma",
+    "sounds": [
+      {
+        "name": "stevespace:plasma_callisto",
+        "stream": false
+      }
+    ]
+  },
+  "plasma_titan": {
+    "subtitle": "subtitles.stevespace.plasma",
+    "sounds": [
+      {
+        "name": "stevespace:plasma_titan",
+        "stream": false
+      }
+    ]
+  },
+  "plasma_enceladus": {
+    "subtitle": "subtitles.stevespace.plasma",
+    "sounds": [
+      {
+        "name": "stevespace:plasma_enceladus",
+        "stream": false
+      }
+    ]
+  },
+  "plasma_uranus": {
+    "subtitle": "subtitles.stevespace.plasma",
+    "sounds": [
+      {
+        "name": "stevespace:plasma_uranus",
+        "stream": false
+      }
+    ]
+  },
+  "plasma_neptune": {
+    "subtitle": "subtitles.stevespace.plasma",
+    "sounds": [
+      {
+        "name": "stevespace:plasma_neptune",
+        "stream": false
+      }
+    ]
+  },
+  "plasma_triton": {
+    "subtitle": "subtitles.stevespace.plasma",
+    "sounds": [
+      {
+        "name": "stevespace:plasma_triton",
+        "stream": false
+      }
+    ]
+  },
+  "plasma_pluto": {
+    "subtitle": "subtitles.stevespace.plasma",
+    "sounds": [
+      {
+        "name": "stevespace:plasma_pluto",
+        "stream": false
+      }
+    ]
+  },
+  "plasma_charon": {
+    "subtitle": "subtitles.stevespace.plasma",
+    "sounds": [
+      {
+        "name": "stevespace:plasma_charon",
+        "stream": false
+      }
+    ]
+  },
+  "plasma_sun": {
+    "subtitle": "subtitles.stevespace.plasma",
+    "sounds": [
+      {
+        "name": "stevespace:plasma_sun",
+        "stream": false
+      }
+    ]
+  },
+  "nuke_near": {
+    "subtitle": "subtitles.stevespace.nuke_near",
+    "sounds": [
+      {
+        "name": "stevespace:nuke_near",
+        "stream": false
+      }
+    ]
+  },
+  "nuke_far": {
+    "subtitle": "subtitles.stevespace.nuke_far",
+    "sounds": [
+      {
+        "name": "stevespace:nuke_far",
+        "stream": false
+      }
+    ]
+  },
+  "plasma_acheron": {
+    "subtitle": "subtitles.stevespace.plasma",
+    "sounds": [
+      {
+        "name": "stevespace:plasma_acheron",
+        "stream": false
+      }
+    ]
+  },
+  "giant_wind": {
+    "subtitle": "subtitles.stevespace.giant_wind",
+    "sounds": [
+      {
+        "name": "stevespace:giant_wind",
+        "stream": false
+      }
+    ]
+  },
+  "hull_creak": {
+    "subtitle": "subtitles.stevespace.hull_creak",
+    "sounds": [
+      {
+        "name": "stevespace:hull_creak_1",
+        "stream": false
+      },
+      {
+        "name": "stevespace:hull_creak_2",
+        "stream": false
+      },
+      {
+        "name": "stevespace:hull_creak_3",
+        "stream": false
+      }
+    ]
+  }
+}

@@ -1,0 +1,21 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "category": "building",
+  "pattern": [
+    " I ",
+    "IHI",
+    " I "
+  ],
+  "key": {
+    "I": {
+      "item": "minecraft:iron_ingot"
+    },
+    "H": {
+      "item": "stevespace:hull_grey"
+    }
+  },
+  "result": {
+    "id": "stevespace:docking_port",
+    "count": 1
+  }
+}

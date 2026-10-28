@@ -1,0 +1,7 @@
+{
+  "type": "stevespace:charon",
+  "generator": {
+    "type": "stevespace:planet",
+    "body": "charon"
+  }
+}

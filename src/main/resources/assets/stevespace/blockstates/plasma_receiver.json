@@ -1,0 +1,19 @@
+{
+  "variants": {
+    "facing=north": {
+      "model": "stevespace:block/plasma_receiver"
+    },
+    "facing=east": {
+      "model": "stevespace:block/plasma_receiver",
+      "y": 90
+    },
+    "facing=south": {
+      "model": "stevespace:block/plasma_receiver",
+      "y": 180
+    },
+    "facing=west": {
+      "model": "stevespace:block/plasma_receiver",
+      "y": 270
+    }
+  }
+}

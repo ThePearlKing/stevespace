@@ -1,0 +1,19 @@
+{
+  "variants": {
+    "facing=north": {
+      "model": "stevespace:block/flag"
+    },
+    "facing=east": {
+      "model": "stevespace:block/flag",
+      "y": 90
+    },
+    "facing=south": {
+      "model": "stevespace:block/flag",
+      "y": 180
+    },
+    "facing=west": {
+      "model": "stevespace:block/flag",
+      "y": 270
+    }
+  }
+}

@@ -1,0 +1,18 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "category": "building",
+  "pattern": [
+    "FFF",
+    "F F",
+    "FFF"
+  ],
+  "key": {
+    "F": {
+      "item": "stevespace:carbon_fibre"
+    }
+  },
+  "result": {
+    "id": "stevespace:carbon_hull",
+    "count": 8
+  }
+}

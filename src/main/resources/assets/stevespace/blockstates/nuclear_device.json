@@ -1,0 +1,94 @@
+{
+  "variants": {
+    "armed=false,facing=north,yield=0": {
+      "model": "stevespace:block/nuclear_device_0"
+    },
+    "armed=true,facing=north,yield=0": {
+      "model": "stevespace:block/nuclear_device_0_armed"
+    },
+    "armed=false,facing=north,yield=1": {
+      "model": "stevespace:block/nuclear_device_1"
+    },
+    "armed=true,facing=north,yield=1": {
+      "model": "stevespace:block/nuclear_device_1_armed"
+    },
+    "armed=false,facing=north,yield=2": {
+      "model": "stevespace:block/nuclear_device_2"
+    },
+    "armed=true,facing=north,yield=2": {
+      "model": "stevespace:block/nuclear_device_2_armed"
+    },
+    "armed=false,facing=east,yield=0": {
+      "model": "stevespace:block/nuclear_device_0",
+      "y": 90
+    },
+    "armed=true,facing=east,yield=0": {
+      "model": "stevespace:block/nuclear_device_0_armed",
+      "y": 90
+    },
+    "armed=false,facing=east,yield=1": {
+      "model": "stevespace:block/nuclear_device_1",
+      "y": 90
+    },
+    "armed=true,facing=east,yield=1": {
+      "model": "stevespace:block/nuclear_device_1_armed",
+      "y": 90
+    },
+    "armed=false,facing=east,yield=2": {
+      "model": "stevespace:block/nuclear_device_2",
+      "y": 90
+    },
+    "armed=true,facing=east,yield=2": {
+      "model": "stevespace:block/nuclear_device_2_armed",
+      "y": 90
+    },
+    "armed=false,facing=south,yield=0": {
+      "model": "stevespace:block/nuclear_device_0",
+      "y": 180
+    },
+    "armed=true,facing=south,yield=0": {
+      "model": "stevespace:block/nuclear_device_0_armed",
+      "y": 180
+    },
+    "armed=false,facing=south,yield=1": {
+      "model": "stevespace:block/nuclear_device_1",
+      "y": 180
+    },
+    "armed=true,facing=south,yield=1": {
+      "model": "stevespace:block/nuclear_device_1_armed",
+      "y": 180
+    },
+    "armed=false,facing=south,yield=2": {
+      "model": "stevespace:block/nuclear_device_2",
+      "y": 180
+    },
+    "armed=true,facing=south,yield=2": {
+      "model": "stevespace:block/nuclear_device_2_armed",
+      "y": 180
+    },
+    "armed=false,facing=west,yield=0": {
+      "model": "stevespace:block/nuclear_device_0",
+      "y": 270
+    },
+    "armed=true,facing=west,yield=0": {
+      "model": "stevespace:block/nuclear_device_0_armed",
+      "y": 270
+    },
+    "armed=false,facing=west,yield=1": {
+      "model": "stevespace:block/nuclear_device_1",
+      "y": 270
+    },
+    "armed=true,facing=west,yield=1": {
+      "model": "stevespace:block/nuclear_device_1_armed",
+      "y": 270
+    },
+    "armed=false,facing=west,yield=2": {
+      "model": "stevespace:block/nuclear_device_2",
+      "y": 270
+    },
+    "armed=true,facing=west,yield=2": {
+      "model": "stevespace:block/nuclear_device_2_armed",
+      "y": 270
+    }
+  }
+}

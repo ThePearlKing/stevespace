@@ -1,0 +1,19 @@
+{
+  "type": "minecraft:crafting_shapeless",
+  "category": "building",
+  "ingredients": [
+    {
+      "item": "stevespace:hull_white"
+    },
+    {
+      "item": "stevespace:hull_white"
+    },
+    {
+      "item": "minecraft:black_dye"
+    }
+  ],
+  "result": {
+    "id": "stevespace:hull_white_band",
+    "count": 2
+  }
+}

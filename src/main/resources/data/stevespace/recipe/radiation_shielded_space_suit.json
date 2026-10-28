@@ -1,0 +1,24 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "category": "building",
+  "pattern": [
+    "MIM",
+    "ISI",
+    "MIM"
+  ],
+  "key": {
+    "M": {
+      "item": "stevespace:magnetite"
+    },
+    "I": {
+      "item": "minecraft:iron_ingot"
+    },
+    "S": {
+      "item": "stevespace:space_suit"
+    }
+  },
+  "result": {
+    "id": "stevespace:radiation_shielded_space_suit",
+    "count": 1
+  }
+}

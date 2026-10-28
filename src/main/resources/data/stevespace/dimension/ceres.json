@@ -1,0 +1,7 @@
+{
+  "type": "stevespace:ceres",
+  "generator": {
+    "type": "stevespace:planet",
+    "body": "ceres"
+  }
+}

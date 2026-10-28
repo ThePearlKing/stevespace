@@ -1,0 +1,8 @@
+{
+  "parent": "minecraft:block/cube_bottom_top",
+  "textures": {
+    "top": "stevespace:block/geyser_vent",
+    "side": "stevespace:block/enceladus_ice",
+    "bottom": "stevespace:block/enceladus_ice"
+  }
+}

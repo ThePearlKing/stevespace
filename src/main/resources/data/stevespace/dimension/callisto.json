@@ -1,0 +1,7 @@
+{
+  "type": "stevespace:callisto",
+  "generator": {
+    "type": "stevespace:planet",
+    "body": "callisto"
+  }
+}

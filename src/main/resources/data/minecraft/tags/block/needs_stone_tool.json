@@ -1,0 +1,15 @@
+{
+  "replace": false,
+  "values": [
+    "stevespace:telluride_ore",
+    "stevespace:helium_regolith",
+    "stevespace:ilmenite_ore",
+    "stevespace:hematite_ore",
+    "stevespace:sulphur_deposit",
+    "stevespace:sulfide_ore",
+    "stevespace:magnetite_ore",
+    "stevespace:carbon_deposit",
+    "stevespace:silica_ice",
+    "stevespace:uraninite_ore"
+  ]
+}

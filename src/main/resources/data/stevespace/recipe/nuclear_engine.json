@@ -1,0 +1,27 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "category": "building",
+  "pattern": [
+    "UMU",
+    "TET",
+    "T T"
+  ],
+  "key": {
+    "U": {
+      "item": "stevespace:uraninite"
+    },
+    "M": {
+      "item": "stevespace:magnetite"
+    },
+    "T": {
+      "item": "stevespace:titanium"
+    },
+    "E": {
+      "item": "stevespace:rocket_engine"
+    }
+  },
+  "result": {
+    "id": "stevespace:nuclear_engine",
+    "count": 1
+  }
+}

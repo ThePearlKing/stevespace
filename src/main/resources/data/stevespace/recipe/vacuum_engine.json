@@ -1,0 +1,23 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "category": "building",
+  "pattern": [
+    "TET",
+    "XTX"
+  ],
+  "key": {
+    "T": {
+      "item": "stevespace:titanium"
+    },
+    "E": {
+      "item": "stevespace:rocket_engine"
+    },
+    "X": {
+      "item": "stevespace:tellurium"
+    }
+  },
+  "result": {
+    "id": "stevespace:vacuum_engine",
+    "count": 1
+  }
+}

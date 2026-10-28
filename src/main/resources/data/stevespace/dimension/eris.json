@@ -1,0 +1,7 @@
+{
+  "type": "stevespace:eris",
+  "generator": {
+    "type": "stevespace:planet",
+    "body": "eris"
+  }
+}

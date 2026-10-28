@@ -1,0 +1,19 @@
+{
+  "variants": {
+    "facing=north": {
+      "model": "stevespace:block/radio_rack"
+    },
+    "facing=east": {
+      "model": "stevespace:block/radio_rack",
+      "y": 90
+    },
+    "facing=south": {
+      "model": "stevespace:block/radio_rack",
+      "y": 180
+    },
+    "facing=west": {
+      "model": "stevespace:block/radio_rack",
+      "y": 270
+    }
+  }
+}

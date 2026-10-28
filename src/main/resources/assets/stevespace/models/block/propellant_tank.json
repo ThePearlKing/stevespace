@@ -1,0 +1,7 @@
+{
+  "parent": "minecraft:block/cube_column",
+  "textures": {
+    "side": "stevespace:block/propellant_tank_side",
+    "end": "stevespace:block/propellant_tank_top"
+  }
+}
