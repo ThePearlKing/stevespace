@@ -2670,7 +2670,7 @@ public final class SelfTest {
                 blocks.put(new BlockPos(1, y, 0), hull);
             }
             blocks.put(new BlockPos(0, 4, 0), com.thepearlking.stevespace.registry.ModBlocks.RADIO_RACK.get().defaultBlockState());
-            blocks.put(new BlockPos(2, 2, 0), port(net.minecraft.core.Direction.EAST));
+            blocks.put(new BlockPos(1, -1, 0), port(net.minecraft.core.Direction.DOWN)); // underneath: the ship's nose port meets it upright
             return new com.thepearlking.stevespace.vessel.VesselStructure(blocks, new java.util.HashMap<>());
         }
 

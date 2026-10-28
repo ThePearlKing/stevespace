@@ -12,6 +12,7 @@ import com.thepearlking.stevespace.universe.ServerUniverse;
 import com.thepearlking.stevespace.universe.StateVector;
 import net.minecraft.world.level.levelgen.Heightmap;
 import org.joml.Quaterniond;
+import net.minecraft.core.Direction;
 
 /**
  * Flies the vessel for the pilot. Each tick it decides where the engines should point and how
@@ -123,6 +124,8 @@ public final class Autopilot {
     /** Out in front of their port, on its axis (from here it's straight in). */
     private boolean dockOnAxis;
     private java.util.concurrent.CompletableFuture<RendezvousPlanner.Plan> dockPlanning;
+    /** The ports picked can't meet without tipping a ship over. */
+    private boolean dockTip;
     /** How the last docking step stood (logs). */
     private String dockDebug = "";
     /** Their port's face last tick (from their centre), and how fast it swings round (a station turning carries its port round). */
@@ -530,6 +533,9 @@ public final class Autopilot {
         if (program == Program.DOCK && phase == Phase.NO_TARGET) {
             return "stevespace.autopilot.dock_lost";
         }
+        if (program == Program.DOCK && dockTip) {
+            return "stevespace.autopilot.dock_tip";
+        }
         return phase == Phase.NO_TARGET ? "stevespace.autopilot.no_target"
                 : phase == Phase.TOO_WEAK ? "stevespace.autopilot.too_weak" : "stevespace.autopilot.no_transfer";
     }
@@ -605,6 +611,15 @@ public final class Autopilot {
             phase = Phase.NO_TARGET;
             return;
         }
+        // Ports that would only meet with one ship tipped over against the other: not done.
+        Direction[] facings = DockTarget.portFacings(vessel, target, mine, theirs);
+        if (facings != null && !DockGeometry.canMeet(facings[0], facings[1])) {
+            program = Program.DOCK;
+            phase = Phase.TOO_WEAK;
+            dockTip = true;
+            return;
+        }
+        dockTip = false;
         finalDestination = target.body().id();
         landAtEnd = false;
         siteLat = Double.NaN;
@@ -896,6 +911,11 @@ public final class Autopilot {
         DVec3 drift = other.orbital().state().velocity().scale(dt);
         DVec3 face = other.portFaceInertial(theirs).add(drift);
         DVec3 direction = other.portDirectionInertial(theirs).normalize();
+        if (!DockGeometry.canMeet(mine.facing(), theirs.facing())) {
+            dockTip = true;
+            phase = Phase.TOO_WEAK; // (a parked ship's ports are only known once it wakes)
+            return null;
+        }
         Quaterniond attitude = DockGeometry.dockAttitude(vessel.inertialOrientation(), other.inertialOrientation(), mine.facing(), theirs.facing());
         if (attitude == null) {
             return null;

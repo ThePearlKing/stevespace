@@ -534,5 +534,7 @@
   "screen.stevespace.remove_ship.gone": "It will be gone for good.",
   "screen.stevespace.remove_ship.wait": "Yes (%s)",
   "stevespace.ship.remove.aboard": "Someone is aboard that ship",
-  "stevespace.ship.remove.done": "%s removed"
+  "stevespace.ship.remove.done": "%s removed",
+  "screen.stevespace.dock.upright": "Ships stay upright: top meets bottom, side meets side",
+  "stevespace.autopilot.dock_tip": "Those ports can't meet without tipping a ship over"
 }

@@ -1537,7 +1537,9 @@ public class VesselEntity extends Entity implements IEntityAdditionalSpawnData {
         double rate = Math.toRadians(SpaceConfig.TURN_RATE.get());
         Vector3d target = new Vector3d();
         if (steerAttitude != null && !isGrounded()) {
-            // Autopilot holding a whole attitude (lining a docking port up, square to the other's).
+            // Autopilot holding a whole attitude (lining a docking port up, square to the other's):
+            // turning gently, so nothing seems to swing round all at once.
+            rate = Math.min(rate, Math.toRadians(8));
             Quaterniond error = new Quaterniond(orientation).conjugate().mul(steerAttitude).normalize();
             if (error.w < 0) {
                 error.set(-error.x, -error.y, -error.z, -error.w); // the short way round
@@ -1828,6 +1830,9 @@ public class VesselEntity extends Entity implements IEntityAdditionalSpawnData {
                 }
             }
         }
+        if (snap[1][1] != 1) {
+            return false; // never join with one ship tipped over against the other
+        }
         Direction theirFacing = turn(snap, theirs.facing());
         if (theirFacing != mine.facing().getOpposite()) {
             return false;
@@ -1873,7 +1878,7 @@ public class VesselEntity extends Entity implements IEntityAdditionalSpawnData {
         }
         other.discard();
         syncState();
-        com.thepearlking.stevespace.StevesSpace.LOGGER.info("Vessel {} docked with {}", getId(), other.getId());
+        com.thepearlking.stevespace.StevesSpace.LOGGER.info("Vessel {} docked with {} (both upright: {})", getId(), other.getId(), snap[1][1] == 1);
         return true;
     }
 

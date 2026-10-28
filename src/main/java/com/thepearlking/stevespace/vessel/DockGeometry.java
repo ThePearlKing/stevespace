@@ -66,6 +66,9 @@ public final class DockGeometry {
             if (x != -theirs.getStepX() || y != -theirs.getStepY() || z != -theirs.getStepZ()) {
                 continue;
             }
+            if (m[1][1] != 1) {
+                continue; // that would tip one ship over against the other: never
+            }
             Quaterniond candidate = new Quaterniond(other).mul(TURNS[i]).normalize();
             double near = Math.abs(candidate.dot(current));
             if (near > closest) {
@@ -74,6 +77,17 @@ public final class DockGeometry {
             }
         }
         return best;
+    }
+
+    /**
+     * Whether two ports can meet with both ships upright to each other (no tipping over): top to
+     * bottom, or side to side.
+     */
+    public static boolean canMeet(Direction mine, Direction theirs) {
+        if (mine.getAxis() == Direction.Axis.Y || theirs.getAxis() == Direction.Axis.Y) {
+            return mine == theirs.getOpposite();
+        }
+        return true;
     }
 
     /** Angle (radians) between two attitudes. */

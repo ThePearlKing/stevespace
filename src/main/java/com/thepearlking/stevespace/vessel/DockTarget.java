@@ -44,6 +44,19 @@ record DockTarget(VesselEntity vessel, ParkedShips.Parked parked, CelestialBody 
         return null;
     }
 
+    /** Which way our port {@code mine} and their port {@code theirs} face (null if either isn't known here). */
+    static net.minecraft.core.Direction[] portFacings(VesselEntity self, DockTarget target, net.minecraft.core.BlockPos mine,
+                                                      net.minecraft.core.BlockPos theirs) {
+        var a = facing(self.structure().get(mine));
+        var b = target.vessel() != null ? facing(target.vessel().structure().get(theirs)) : null;
+        return a == null || b == null ? null : new net.minecraft.core.Direction[]{a, b};
+    }
+
+    private static net.minecraft.core.Direction facing(net.minecraft.world.level.block.state.BlockState state) {
+        return state != null && state.getBlock() instanceof com.thepearlking.stevespace.block.DockingPortBlock
+                ? state.getValue(com.thepearlking.stevespace.block.DockingPortBlock.FACING) : null;
+    }
+
     /** Where it is at time {@code t} (relative to its body). */
     StateVector state(double t) {
         if (vessel != null) {

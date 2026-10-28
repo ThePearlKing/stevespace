@@ -91,6 +91,7 @@ public class DockScreen extends Screen {
                 if (theirPort == i) {
                     chosen.add(b);
                 }
+                b.active = myPort < 0 || meet(list.mine().get(myPort), ship.ports().get(i));
                 addRenderableWidget(b);
                 portButtons.add(b);
                 x += 57;
@@ -109,6 +110,7 @@ public class DockScreen extends Screen {
                 if (myPort == i) {
                     chosen.add(b);
                 }
+                b.active = theirPort < 0 || meet(list.mine().get(i), ship.ports().get(theirPort));
                 addRenderableWidget(b);
                 portButtons.add(b);
                 x += 57;
@@ -119,7 +121,8 @@ public class DockScreen extends Screen {
         }
         dock = Button.builder(Component.translatable("screen.stevespace.dock.go"), b -> go())
                 .bounds(left + LIST_W - 12 - 90, top + H - 26, 90, 20).build();
-        dock.active = list != null && selected >= 0 && theirPort >= 0 && myPort >= 0;
+        dock.active = list != null && selected >= 0 && theirPort >= 0 && myPort >= 0
+                && meet(list.mine().get(myPort), list.ships().get(selected).ports().get(theirPort));
         addRenderableWidget(dock);
         addRenderableWidget(Button.builder(Component.translatable("gui.back"), b -> onClose())
                 .bounds(left + 12, top + H - 26, 70, 20).build());
@@ -127,6 +130,16 @@ public class DockScreen extends Screen {
 
     private int listTop() {
         return list != null && !list.rcs() && !list.mine().isEmpty() ? 58 : 26;
+    }
+
+    /** Whether two ports can meet with both ships upright: top to bottom, or side to side (never tipping one over). */
+    private static boolean meet(DockListS2C.Port mine, DockListS2C.Port theirs) {
+        boolean upDownMine = mine.side().equals("top") || mine.side().equals("bottom");
+        boolean upDownTheirs = theirs.side().equals("top") || theirs.side().equals("bottom");
+        if (upDownMine || upDownTheirs) {
+            return upDownMine && upDownTheirs && !mine.side().equals(theirs.side());
+        }
+        return true;
     }
 
     private static String portName(List<DockListS2C.Port> ports, int i) {
@@ -234,6 +247,8 @@ public class DockScreen extends Screen {
             int y = y0 + ROWS * ROW + 22;
             g.drawString(font, Component.translatable("screen.stevespace.dock.their_port"), left + 12, y, GREEN, false);
             g.drawString(font, Component.translatable("screen.stevespace.dock.my_port"), left + 12, y + 20, GREEN, false);
+            g.drawString(font, font.plainSubstrByWidth(Component.translatable("screen.stevespace.dock.upright").getString(), LIST_W - 24),
+                    left + 12, y + 38, GREEN_DIM, false);
             // Pictures of both ships, turning, the picked ports lit up.
             DockListS2C.Entry ship = list.ships().get(selected);
             int px = left + LIST_W;

@@ -2138,8 +2138,8 @@ public final class ClientTest {
                     station.put(new net.minecraft.core.BlockPos(0, y, 0), hull);
                     station.put(new net.minecraft.core.BlockPos(1, y, 0), hull);
                 }
-                station.put(new net.minecraft.core.BlockPos(2, 2, 0), port.setValue(com.thepearlking.stevespace.block.DockingPortBlock.FACING,
-                        net.minecraft.core.Direction.EAST));
+                station.put(new net.minecraft.core.BlockPos(1, -1, 0), port.setValue(com.thepearlking.stevespace.block.DockingPortBlock.FACING,
+                        net.minecraft.core.Direction.DOWN));
                 var st = com.thepearlking.stevespace.vessel.VesselEntity.spawnInOrbit(space,
                         new com.thepearlking.stevespace.vessel.VesselStructure(station, new java.util.HashMap<>()), earth, at.apply(2.0), new org.joml.Quaterniond());
                 st.setCustomName(net.minecraft.network.chat.Component.literal("Outpost"));

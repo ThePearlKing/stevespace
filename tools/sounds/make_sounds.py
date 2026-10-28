@@ -1014,9 +1014,8 @@ def hull_creak(variant=0):
     return lowpass(x, 3000, 2)
 
 def rcs_puff(variant=0):
-    """One RCS valve opening and closing: the solenoid's metallic tick, a short hiss of gas through
-    the nozzle (bright, with a ragged start), and a dull knock through the hull as the thrust
-    comes on and off."""
+    """One RCS valve opening and closing: the solenoid's metallic tick and a short hiss of gas
+    through the nozzle (bright, with a ragged start)."""
     rng = np.random.default_rng(410 + variant)
     seconds = 0.32
     n = int(seconds * RATE)
@@ -1039,13 +1038,8 @@ def rcs_puff(variant=0):
             imp[0] = 1
             ring += signal.lfilter(b, a, imp)
         x[k:k + m] += ring * level * 6 * np.std(gas)
-    # The hull knock: low thump at both ends of the burst.
-    for at in (0.0, on):
-        k = int(at * RATE)
-        m = min(n - k, int(0.05 * RATE))
-        tt = np.arange(m) / RATE
-        x[k:k + m] += np.sin(2 * np.pi * (95 + 10 * variant) * tt) * np.exp(-tt / 0.012) * 1.5 * np.std(gas)
-    return x
+    # (No low knock: a thump at the start and end of each burst sounded like something else.)
+    return bandpass(x, 600, 12000)
 
 
 def preview(folder, names):

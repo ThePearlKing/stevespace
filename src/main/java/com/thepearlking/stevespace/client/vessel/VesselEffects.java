@@ -89,8 +89,8 @@ public final class VesselEffects {
         // The valves clatter in short bursts.
         boolean aboard = VesselEntity.shipOf(mc.player) == vessel;
         boolean air = !SpaceDimension.isSpace(level);
-        if ((aboard || air) && random.nextInt(4) == 0) {
-            float volume = (aboard ? 0.35f : 0.8f) * (0.5f + 0.5f * strength);
+        if ((aboard || air) && random.nextInt(8) == 0) {
+            float volume = (aboard ? 0.18f : 0.5f) * (0.5f + 0.5f * strength);
             level.playLocalSound(vessel.getX(), vessel.getY(), vessel.getZ(), com.thepearlking.stevespace.registry.ModSounds.RCS_PUFF.get(),
                     net.minecraft.sounds.SoundSource.NEUTRAL, volume, 0.9f + random.nextFloat() * 0.2f, false);
         }
