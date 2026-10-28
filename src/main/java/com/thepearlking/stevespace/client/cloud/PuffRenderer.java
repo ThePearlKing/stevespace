@@ -167,6 +167,74 @@ public final class PuffRenderer {
         RenderSystem.defaultBlendFunc();
     }
 
+    /**
+     * Puffs far out over the distant ground, drawn shrunk about the eye by {@code scale} the same
+     * way the far terrain is, against its depth: hills and the curve of the world hide them.
+     * Positions are relative to the eye (blocks, world axes); {@code toView} is the far terrain's
+     * own view matrix.
+     */
+    public static void drawScaled(List<Puff> puffs, Matrix4f toView, Matrix4f projection, float scale, Light light, float time) {
+        if (puffs.isEmpty() || SpaceShaders.puff() == null) {
+            return;
+        }
+        List<Puff> sorted = new ArrayList<>(puffs);
+        sorted.sort((p, q) -> Double.compare(q.x() * q.x() + q.y() * q.y() + q.z() * q.z(), p.x() * p.x() + p.y() * p.y() + p.z() * p.z()));
+        Matrix4f back = new Matrix4f(toView).invert();
+        Vector3f right = back.transformDirection(new Vector3f(1, 0, 0)).normalize();
+        Vector3f up = back.transformDirection(new Vector3f(0, 1, 0)).normalize();
+        Vector3f sunView = toView.transformDirection(new Vector3f(light.sun())).normalize();
+        Vector3f upView = toView.transformDirection(new Vector3f(0, 1, 0)).normalize();
+        var shader = SpaceShaders.puff();
+        RenderSystem.setShader(SpaceShaders::puff);
+        shader.safeGetUniform("SunView").set(sunView.x, sunView.y, sunView.z);
+        shader.safeGetUniform("UpView").set(upView.x, upView.y, upView.z);
+        shader.safeGetUniform("SunLight").set(light.sunColour().x, light.sunColour().y, light.sunColour().z);
+        shader.safeGetUniform("Ambient").set(light.ambient().x, light.ambient().y, light.ambient().z);
+        shader.safeGetUniform("HazeColor").set(light.haze().x, light.haze().y, light.haze().z);
+        shader.safeGetUniform("HazeDistance").set(light.hazeDistance());
+        shader.safeGetUniform("AnimTime").set(time);
+        RenderSystem.backupProjectionMatrix();
+        RenderSystem.setProjectionMatrix(projection, com.mojang.blaze3d.vertex.VertexSorting.DISTANCE_TO_ORIGIN);
+        Matrix4fStack stack = RenderSystem.getModelViewStack();
+        stack.pushMatrix();
+        stack.identity();
+        RenderSystem.applyModelViewMatrix();
+        RenderSystem.enableBlend();
+        RenderSystem.defaultBlendFunc();
+        RenderSystem.enableDepthTest();
+        RenderSystem.depthMask(false);
+        RenderSystem.disableCull();
+        // How many quarters further each puff really is than drawn (for the haze).
+        float f = Math.min(990, Math.round(4 / scale)) * 10f;
+        BufferBuilder builder = Tesselator.getInstance().begin(VertexFormat.Mode.QUADS, DefaultVertexFormat.POSITION_TEX_COLOR_NORMAL);
+        for (Puff p : sorted) {
+            float cx = (float) p.x() * scale;
+            float cy = (float) p.y() * scale;
+            float cz = (float) p.z() * scale;
+            float radius = p.radius() * scale;
+            float rx = right.x * radius;
+            float ry = right.y * radius;
+            float rz = right.z * radius;
+            float ux = up.x * radius;
+            float uy = up.y * radius;
+            float uz = up.z * radius;
+            float s = (p.seed() % 997) * 10f;
+            float gx = p.glowR() * 2 - 1;
+            float gy = p.glowG() * 2 - 1;
+            float gz = p.glowB() * 2 - 1;
+            vertex(builder, toView, cx - rx - ux, cy - ry - uy, cz - rz - uz, -1 + s, -1 + f, p, gx, gy, gz);
+            vertex(builder, toView, cx + rx - ux, cy + ry - uy, cz + rz - uz, 1 + s, -1 + f, p, gx, gy, gz);
+            vertex(builder, toView, cx + rx + ux, cy + ry + uy, cz + rz + uz, 1 + s, 1 + f, p, gx, gy, gz);
+            vertex(builder, toView, cx - rx + ux, cy - ry + uy, cz - rz + uz, -1 + s, 1 + f, p, gx, gy, gz);
+        }
+        BufferUploader.drawWithShader(builder.buildOrThrow());
+        stack.popMatrix();
+        RenderSystem.applyModelViewMatrix();
+        RenderSystem.restoreProjectionMatrix();
+        RenderSystem.enableCull();
+        RenderSystem.defaultBlendFunc();
+    }
+
     private static void vertex(BufferBuilder b, Matrix4f view, float x, float y, float z, float u, float v, Puff p,
                                float gx, float gy, float gz) {
         b.addVertex(view, x, y, z).setUv(u, v).setColor(p.r(), p.g(), p.b(), p.a()).setNormal(gx, gy, gz);

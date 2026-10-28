@@ -233,20 +233,25 @@ public final class ClientWeather {
      * towering heads where there's thunder, so a storm can be seen sitting out on the horizon
      * (and from under it, the sky's a dark lid).
      */
-    @SubscribeEvent
-    public static void onRenderStage(net.minecraftforge.client.event.RenderLevelStageEvent event) {
-        if (event.getStage() != net.minecraftforge.client.event.RenderLevelStageEvent.Stage.AFTER_TRANSLUCENT_BLOCKS || storms.isEmpty()) {
-            return;
+    /** Where a storm's cloud deck starts (blocks, world y). */
+    private static final double CLOUD_BASE = 200;
+    /** The frame the far puffs were last drawn over the far terrain (then the world pass leaves them out). */
+    private static int farFrame = -1;
+    private static int frame;
+
+    /**
+     * The storms' puffs round the eye (world positions, no drop for the curve of the world yet),
+     * leaving out any already gone below the horizon.
+     */
+    private static List<com.thepearlking.stevespace.client.cloud.PuffRenderer.Puff> puffs(net.minecraft.world.phys.Vec3 eye) {
+        List<com.thepearlking.stevespace.client.cloud.PuffRenderer.Puff> puffs = new ArrayList<>();
+        if (storms.isEmpty() || ClientUniverse.system() == null) {
+            return puffs;
         }
-        Minecraft mc = Minecraft.getInstance();
-        if (mc.level == null || mc.level.dimension() != Level.OVERWORLD || ClientUniverse.system() == null) {
-            return;
-        }
-        var eye = event.getCamera().getPosition();
         double width = width();
         long now = now();
         double radius = ClientUniverse.system().earth().radius();
-        List<com.thepearlking.stevespace.client.cloud.PuffRenderer.Puff> puffs = new ArrayList<>();
+        double eyeHorizon = Math.sqrt(2 * radius * Math.max(1, eye.y - 63));
         for (WeatherSystems.Storm s : storms()) {
             double strength = s.strength(now);
             if (strength <= 0.02) {
@@ -259,22 +264,23 @@ public final class ClientWeather {
                 continue;
             }
             java.util.Random random = new java.util.Random(s.id() * 7919L);
-            int n = (int) Math.min(220, 24 + s.radius() * s.radius() / 9000);
+            int n = (int) Math.min(420, 30 + s.radius() * s.radius() / 5000);
             for (int i = 0; i < n; i++) {
                 double a = random.nextDouble() * Math.PI * 2;
                 double d = Math.sqrt(random.nextDouble()) * s.radius() * 0.85;
                 double px = eye.x + dx + Math.cos(a) * d;
                 double pz = eye.z + dz + Math.sin(a) * d;
                 double edge = 1 - d / s.radius();
-                double size = (s.radius() * 0.18) * (0.6 + 0.6 * random.nextDouble()) * (0.5 + 0.5 * strength);
+                double size = Math.min(140, s.radius() * 0.12 * (0.6 + 0.6 * random.nextDouble())) * (0.5 + 0.5 * strength);
                 // A thunderstorm's middle towers up; a rain deck stays low and flat.
                 double tower = s.thunder() ? Math.pow(edge, 1.5) * (90 + 140 * random.nextDouble()) * strength : 10 * random.nextDouble();
-                double y = 205 + tower * random.nextDouble() + size * 0.15;
-                // Far off it sinks below the curve of the world like the hills do.
-                double far2 = (px - eye.x) * (px - eye.x) + (pz - eye.z) * (pz - eye.z);
-                y -= far2 / (2 * radius);
-                double toEye = Math.sqrt(far2 + (y - eye.y) * (y - eye.y));
-                if (toEye < size * 1.6) {
+                // Sitting on the deck's base, not hanging below it.
+                double y = CLOUD_BASE + size * 0.6 + tower * random.nextDouble();
+                double far = Math.hypot(px - eye.x, pz - eye.z);
+                if (far > 1.1 * (eyeHorizon + Math.sqrt(2 * radius * Math.max(0, y + size - 63)))) {
+                    continue; // down past the curve of the world
+                }
+                if (Math.sqrt(far * far + (y - eye.y) * (y - eye.y)) < size * 1.6) {
                     continue; // right over (or round) you: the storm's dark sky is all there is to see
                 }
                 float shade = (float) (0.55 + 0.2 * random.nextDouble() - 0.15 * s.rain());
@@ -283,14 +289,90 @@ public final class ClientWeather {
                         alpha, 0, 0, 0, random.nextInt()));
             }
         }
+        return puffs;
+    }
+
+    private static com.thepearlking.stevespace.client.cloud.PuffRenderer.Light light(float partial) {
+        var light = com.thepearlking.stevespace.client.nuke.NukeClient.light(partial);
+        return new com.thepearlking.stevespace.client.cloud.PuffRenderer.Light(light.sun(), light.sunColour(), light.ambient(), light.haze(), 9000f);
+    }
+
+    private static float animTime() {
+        return (float) ((net.minecraft.Util.getMillis() / 1000.0) % 10000);
+    }
+
+    /** Past the loaded chunks, puffs are drawn with the far terrain instead (it hides them behind hills). */
+    private static double nearReach() {
+        return Math.max(32, Minecraft.getInstance().options.getEffectiveRenderDistance() * 16 - 24);
+    }
+
+    /**
+     * The storm clouds out past the loaded chunks, drawn in with the far terrain while its depth is
+     * still there: bent down over the world's curve as it is ({@code flat}: how far out it stays flat),
+     * shrunk by the same {@code scale}.
+     */
+    public static void drawFar(org.joml.Matrix4f view, org.joml.Matrix4f projection, float scale, double flat, net.minecraft.world.phys.Vec3 eye) {
+        Minecraft mc = Minecraft.getInstance();
+        if (mc.level == null || mc.level.dimension() != Level.OVERWORLD) {
+            return;
+        }
+        farFrame = frame;
+        double radius = ClientUniverse.system().earth().radius();
+        double reach = nearReach();
+        List<com.thepearlking.stevespace.client.cloud.PuffRenderer.Puff> rel = new ArrayList<>();
+        for (var p : puffs(eye)) {
+            double dx = p.x() - eye.x;
+            double dz = p.z() - eye.z;
+            double d = Math.hypot(dx, dz);
+            if (d <= reach) {
+                continue;
+            }
+            // The same bend as the far terrain's.
+            double h = p.y() - 63;
+            double bend = Math.max(0, d - flat) / radius;
+            double horizontal = d;
+            double vertical = h;
+            if (bend > 0) {
+                horizontal = flat + (radius + h) * Math.sin(bend);
+                vertical = (radius + h) * Math.cos(bend) - radius;
+            }
+            double k = horizontal / Math.max(1e-3, d);
+            rel.add(new com.thepearlking.stevespace.client.cloud.PuffRenderer.Puff(dx * k, vertical - (eye.y - 63), dz * k, p.radius(),
+                    p.r(), p.g(), p.b(), p.a(), p.glowR(), p.glowG(), p.glowB(), p.seed()));
+        }
+        com.thepearlking.stevespace.client.cloud.PuffRenderer.drawScaled(rel, view, projection, scale, light(mc.getTimer().getGameTimeDeltaPartialTick(false)), animTime());
+    }
+
+    @SubscribeEvent
+    public static void onRenderStage(net.minecraftforge.client.event.RenderLevelStageEvent event) {
+        if (event.getStage() != net.minecraftforge.client.event.RenderLevelStageEvent.Stage.AFTER_TRANSLUCENT_BLOCKS) {
+            return;
+        }
+        // Whether the far terrain took the far puffs this frame.
+        boolean farDrawn = farFrame == frame;
+        frame++;
+        Minecraft mc = Minecraft.getInstance();
+        if (storms.isEmpty() || mc.level == null || mc.level.dimension() != Level.OVERWORLD || ClientUniverse.system() == null) {
+            return;
+        }
+        var eye = event.getCamera().getPosition();
+        double radius = ClientUniverse.system().earth().radius();
+        double reach = nearReach();
+        List<com.thepearlking.stevespace.client.cloud.PuffRenderer.Puff> puffs = new ArrayList<>();
+        for (var p : puffs(eye)) {
+            double far2 = (p.x() - eye.x) * (p.x() - eye.x) + (p.z() - eye.z) * (p.z() - eye.z);
+            if (farDrawn && far2 > reach * reach) {
+                continue;
+            }
+            // Far off it sinks below the curve of the world like the hills do.
+            puffs.add(new com.thepearlking.stevespace.client.cloud.PuffRenderer.Puff(p.x(), p.y() - far2 / (2 * radius), p.z(), p.radius(),
+                    p.r(), p.g(), p.b(), p.a(), p.glowR(), p.glowG(), p.glowB(), p.seed()));
+        }
         if (puffs.isEmpty()) {
             return;
         }
         org.joml.Matrix4f view = new org.joml.Matrix4f().rotation(event.getCamera().rotation().conjugate(new org.joml.Quaternionf()));
-        var light = com.thepearlking.stevespace.client.nuke.NukeClient.light(event.getPartialTick());
-        com.thepearlking.stevespace.client.cloud.PuffRenderer.draw(puffs, view, event.getCamera(),
-                new com.thepearlking.stevespace.client.cloud.PuffRenderer.Light(light.sun(), light.sunColour(), light.ambient(), light.haze(), 9000f),
-                (float) ((net.minecraft.Util.getMillis() / 1000.0) % 10000));
+        com.thepearlking.stevespace.client.cloud.PuffRenderer.draw(puffs, view, event.getCamera(), light(event.getPartialTick()), animTime());
     }
 
     @SubscribeEvent

@@ -2036,6 +2036,12 @@ public final class ClientTest {
         scenes.add(new Scene("weather_storm", mc -> playerCommand(mc, "weather thunder"), 260));
         scenes.add(new Scene("weather_far", mc -> command(mc, "tp @a 3000 140 0"), 200));
         scenes.add(new Scene("weather_far_look", mc -> look(mc, 90, -6), 40));
+        scenes.add(new Scene("weather_far_low", mc -> {
+            command(mc, "gamemode spectator @a");
+            command(mc, "tp @a 3000 95 0 90 -3");
+        }, 120));
+        scenes.add(new Scene("weather_far_side", mc -> look(mc, 60, -3), 40));
+        scenes.add(new Scene("weather_far_done", mc -> command(mc, "gamemode creative @a"), 5));
         scenes.add(new Scene("weather_back", mc -> command(mc, "tp @a 0 140 0"), 260));
         scenes.add(new Scene("weather_clear", mc -> playerCommand(mc, "weather clear"), 400));
         scenes.add(new Scene("weather_orbit", mc -> {
