@@ -70,6 +70,22 @@ public final class VesselServer {
         }
     }
 
+    /** The pilot chose a ship (and ports) to dock with: fly there and dock, launching first if still on the pad. */
+    public static void onDock(ServerPlayer player, java.util.UUID id, int cell, BlockPos mine, BlockPos theirs) {
+        Entity vehicle = player.getVehicle();
+        if (VesselEntity.shipOf(player, 2) instanceof VesselEntity vessel) {
+            if (vessel.pilot() == player) {
+                vessel.setControls(VesselControls.IDLE);
+                vessel.startDock(id, cell, mine, theirs);
+            }
+        } else if (vehicle instanceof SeatEntity seat) {
+            VesselEntity vessel = tryLaunch(player, seat.blockPosition(), VesselControls.IDLE);
+            if (vessel != null) {
+                vessel.startDock(id, cell, mine, theirs);
+            }
+        }
+    }
+
     /** The pilot chose an autopilot program: engage it, launching first if still on the pad. */
     public static void onAutopilot(ServerPlayer player, Autopilot.Program program) {
         onAutopilot(player, program, "", false);

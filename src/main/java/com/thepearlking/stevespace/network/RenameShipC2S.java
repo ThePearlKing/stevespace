@@ -47,8 +47,7 @@ public record RenameShipC2S(String name) {
             if (parked == null || !parked.contains(player.getX(), player.getY(), player.getZ(), 48)) {
                 return;
             }
-            parkedShips.put(new ParkedShips.Parked(parked.cell(), parked.body(), parked.state(), parked.time(), name,
-                    parked.min(), parked.max(), parked.anchor()));
+            parkedShips.put(parked.withName(name));
         } else {
             return;
         }

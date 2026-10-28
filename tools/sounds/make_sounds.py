@@ -1013,6 +1013,41 @@ def hull_creak(variant=0):
         x[k:k + 600] += bandpass(click, 900, 4000) * 3 * np.std(x)
     return lowpass(x, 3000, 2)
 
+def rcs_puff(variant=0):
+    """One RCS valve opening and closing: the solenoid's metallic tick, a short hiss of gas through
+    the nozzle (bright, with a ragged start), and a dull knock through the hull as the thrust
+    comes on and off."""
+    rng = np.random.default_rng(410 + variant)
+    seconds = 0.32
+    n = int(seconds * RATE)
+    t = np.arange(n) / RATE
+    on = 0.11 + 0.03 * variant  # how long the valve stays open
+    gas = rng.normal(size=n)
+    gas = bandpass(gas, 1200 + 300 * variant, 9000)
+    attack = np.clip(t / 0.004, 0, 1)
+    release = np.where(t < on, 1.0, np.exp(-(t - on) / 0.025))
+    flutter = 1 + 0.25 * smooth_noise(n, rng, int(0.006 * RATE))
+    x = gas * attack * release * flutter
+    # Solenoid ticks at open and close: short rings of the valve body.
+    for at, level in ((0.0, 1.0), (on, 0.6)):
+        k = int(at * RATE)
+        m = min(n - k, 700)
+        ring = np.zeros(m)
+        for f, q in ((2400 + 150 * variant, 25), (4100, 30), (6300 - 200 * variant, 35)):
+            b, a = signal.iirpeak(f / (RATE / 2), q)
+            imp = np.zeros(m)
+            imp[0] = 1
+            ring += signal.lfilter(b, a, imp)
+        x[k:k + m] += ring * level * 6 * np.std(gas)
+    # The hull knock: low thump at both ends of the burst.
+    for at in (0.0, on):
+        k = int(at * RATE)
+        m = min(n - k, int(0.05 * RATE))
+        tt = np.arange(m) / RATE
+        x[k:k + m] += np.sin(2 * np.pi * (95 + 10 * variant) * tt) * np.exp(-tt / 0.012) * 1.5 * np.std(gas)
+    return x
+
+
 def preview(folder, names):
     """Writes WAVs to a scratch folder instead of the mod (python3 make_sounds.py --preview DIR name...)."""
     os.makedirs(folder, exist_ok=True)
@@ -1032,6 +1067,9 @@ if __name__ == '__main__':
         if 'hull_creak' in sys.argv:
             for v in range(3):
                 write(f'hull_creak_{v + 1}', hull_creak(v), peak_db=-4.0)
+        if 'rcs_puff' in sys.argv:
+            for v in range(3):
+                write(f'rcs_puff_{v + 1}', rcs_puff(v), peak_db=-5.0)
         sys.exit()
     if len(sys.argv) > 2 and sys.argv[1] == '--preview':
         preview(sys.argv[2], sys.argv[3:])
@@ -1047,3 +1085,5 @@ if __name__ == '__main__':
     write('giant_wind', giant_wind(), peak_db=-4.0, rms_db=-18.0)
     for v in range(3):
         write(f'hull_creak_{v + 1}', hull_creak(v), peak_db=-4.0)
+    for v in range(3):
+        write(f'rcs_puff_{v + 1}', rcs_puff(v), peak_db=-5.0)

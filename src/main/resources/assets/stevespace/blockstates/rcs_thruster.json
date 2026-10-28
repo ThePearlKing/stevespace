@@ -1,0 +1,30 @@
+{
+  "variants": {
+    "facing=up": {
+      "model": "stevespace:block/rcs_thruster"
+    },
+    "facing=down": {
+      "model": "stevespace:block/rcs_thruster",
+      "x": 180
+    },
+    "facing=north": {
+      "model": "stevespace:block/rcs_thruster",
+      "x": 90
+    },
+    "facing=south": {
+      "model": "stevespace:block/rcs_thruster",
+      "x": 90,
+      "y": 180
+    },
+    "facing=east": {
+      "model": "stevespace:block/rcs_thruster",
+      "x": 90,
+      "y": 90
+    },
+    "facing=west": {
+      "model": "stevespace:block/rcs_thruster",
+      "x": 90,
+      "y": 270
+    }
+  }
+}

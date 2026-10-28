@@ -15,7 +15,7 @@ import net.minecraft.network.chat.Component;
 public class AutopilotScreen extends Screen {
 
     private static final int W = 196;
-    private static final int H = 247;
+    private static final int H = 270;
     private static final int SCREEN = 0xF00B0F0D;
     private static final int FRAME = 0xFF3B4247;
     private static final int FRAME_LIGHT = 0xFF5A6268;
@@ -46,6 +46,10 @@ public class AutopilotScreen extends Screen {
         Button travel = Button.builder(Component.translatable("screen.stevespace.autopilot.travel"),
                 b -> Minecraft.getInstance().setScreen(MapScreen.forDestination())).bounds(left + 12, y, W - 24, 20).build();
         addRenderableWidget(travel);
+        y += 23;
+        // Docking flies there from anywhere (to orbit first, or to the other world).
+        addRenderableWidget(Button.builder(Component.translatable("screen.stevespace.autopilot.dock"),
+                b -> Minecraft.getInstance().setScreen(new DockScreen(this))).bounds(left + 12, y, W - 24, 20).build());
         y += 23;
         y = program(left, y, Autopilot.Program.APPROACH, body != null && com.thepearlking.stevespace.client.space.ClientTarget.active());
         y = program(left, y, Autopilot.Program.UNDOCK, body != null);

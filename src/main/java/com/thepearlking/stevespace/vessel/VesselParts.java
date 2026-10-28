@@ -63,7 +63,12 @@ public final class VesselParts {
         mass(ModBlocks.NUCLEAR_ENGINE.get(), 2.0);
         ENGINES.put(ModBlocks.NUCLEAR_ENGINE.get(), new EngineSpec(150, 1700));
         mass(ModBlocks.CARBON_HULL.get(), 0.03);
+        mass(ModBlocks.RCS_THRUSTER.get(), 0.05);
     }
+
+    /** Push of one RCS thruster block (kN, in any direction) and its exhaust speed (m/s). */
+    public static final double RCS_THRUST = 4;
+    public static final double RCS_EXHAUST = 700;
 
     private static void mass(Block block, double tonnes) {
         MASS.put(block, tonnes);

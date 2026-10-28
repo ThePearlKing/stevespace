@@ -128,6 +128,14 @@ public final class PowerGrid {
                     continue;
                 }
                 BlockState state = level.getBlockState(n);
+                // Docking ports: power goes out through a collar only into another port that, like
+                // this one, has sharing on (so docked ships keep their power to themselves unless both say).
+                BlockState here = level.getBlockState(p);
+                if ((com.thepearlking.stevespace.block.DockingPortBlock.throughCollar(here, p, n)
+                        || com.thepearlking.stevespace.block.DockingPortBlock.throughCollar(state, n, p))
+                        && !com.thepearlking.stevespace.block.DockingPortBlock.sharesWith(here, p, state, n)) {
+                    continue;
+                }
                 BlockEntity be = level.getBlockEntity(n);
                 if (be != null && !n.equals(origin) && users.add(n)) {
                     Direction side = Direction.fromDelta(-offset.getX(), -offset.getY(), -offset.getZ());

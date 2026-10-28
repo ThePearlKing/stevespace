@@ -32,12 +32,17 @@ public final class VesselStats {
     public record Port(BlockPos pos, Direction facing) {
     }
 
+    /** An RCS thruster: its block and which way it sticks out from the hull. */
+    public record Rcs(BlockPos pos, Direction facing) {
+    }
+
     private final double dryMass;
     private final double propellantCapacity;
     private final Vector3d centerOfMass;
     private final List<Engine> engines;
     private final List<Seat> seats;
     private final List<Port> ports;
+    private final List<Rcs> rcs;
     private final List<Vector3d> hullPoints;
     private final double radius;
     private final double crossSection;
@@ -50,6 +55,7 @@ public final class VesselStats {
         List<Engine> engineList = new ArrayList<>();
         List<Seat> seatList = new ArrayList<>();
         List<Port> portList = new ArrayList<>();
+        List<Rcs> rcsList = new ArrayList<>();
         List<Vector3d> hull = new ArrayList<>();
         for (Map.Entry<BlockPos, BlockState> entry : structure.blocks().entrySet()) {
             BlockPos p = entry.getKey();
@@ -75,6 +81,9 @@ public final class VesselStats {
             if (state.getBlock() instanceof com.thepearlking.stevespace.block.DockingPortBlock) {
                 portList.add(new Port(p, state.getValue(com.thepearlking.stevespace.block.DockingPortBlock.FACING)));
             }
+            if (state.getBlock() instanceof com.thepearlking.stevespace.block.RcsThrusterBlock) {
+                rcsList.add(new Rcs(p, state.getValue(com.thepearlking.stevespace.block.RcsThrusterBlock.FACING)));
+            }
             if (isExposed(structure, p)) {
                 hull.add(new Vector3d(p.getX() + 0.5, p.getY() + 0.5, p.getZ() + 0.5));
             }
@@ -87,6 +96,7 @@ public final class VesselStats {
         // The seat the vessel was launched from (its origin) is the pilot's: always first.
         // The seat it was launched from first, then other pilot seats, then the passengers'.
         seatList.sort(java.util.Comparator.comparingInt(seat -> seat.pos().equals(BlockPos.ZERO) ? 0 : seat.pilot() ? 1 : 2));
+        this.rcs = Collections.unmodifiableList(rcsList);
         this.seats = Collections.unmodifiableList(seatList);
         this.ports = Collections.unmodifiableList(portList);
         this.hullPoints = Collections.unmodifiableList(hull);
@@ -130,6 +140,15 @@ public final class VesselStats {
 
     public List<Port> ports() {
         return ports;
+    }
+
+    public List<Rcs> rcs() {
+        return rcs;
+    }
+
+    /** Push of all the RCS thrusters together, in any one direction (kN). */
+    public double rcsThrust() {
+        return rcs.size() * VesselParts.RCS_THRUST;
     }
 
     public List<Vector3d> hullPoints() {

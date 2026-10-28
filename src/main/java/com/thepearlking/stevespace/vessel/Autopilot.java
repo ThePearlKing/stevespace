@@ -11,6 +11,7 @@ import com.thepearlking.stevespace.universe.OrbitalElements;
 import com.thepearlking.stevespace.universe.ServerUniverse;
 import com.thepearlking.stevespace.universe.StateVector;
 import net.minecraft.world.level.levelgen.Heightmap;
+import org.joml.Quaterniond;
 
 /**
  * Flies the vessel for the pilot. Each tick it decides where the engines should point and how
@@ -29,15 +30,24 @@ import net.minecraft.world.level.levelgen.Heightmap;
  */
 public final class Autopilot {
 
-    public enum Program { OFF, ORBIT, CIRCULARIZE, LAND, MOON, RETURN, APPROACH, UNDOCK, TRAVEL, NODE }
+    public enum Program { OFF, ORBIT, CIRCULARIZE, LAND, MOON, RETURN, APPROACH, UNDOCK, TRAVEL, NODE, DOCK }
 
-    /** What the autopilot wants this tick: thrust direction (unit, world axes) and throttle. */
-    public record Command(DVec3 direction, double throttle) {
+    /**
+     * What the autopilot wants this tick: thrust direction (unit, world axes) and throttle; and
+     * optionally a push from the RCS thrusters ({@code translate}, world axes, blocks/s²) and a whole
+     * attitude to hold ({@code attitude}, vessel to world axes) instead of just pointing the engines.
+     */
+    public record Command(DVec3 direction, double throttle, DVec3 translate, org.joml.Quaterniond attitude) {
+
+        public Command(DVec3 direction, double throttle) {
+            this(direction, throttle, null, null);
+        }
     }
 
     private enum Phase { CLIMB, COAST, CIRCULARIZE, DEORBIT, ENTRY, LANDING_BURN, TOUCHDOWN,
         PLAN, WAIT_BURN, TRANSFER_BURN, CRUISE, CORRECTION, CAPTURE, APPROACH, NO_TARGET, NO_TRANSFER, DONE,
-        ROUTE, ESCAPE, LEAVE, INTER_PLAN, INTER_WAIT, HELIO, ARRIVE, SETTLE, NODE_WAIT, TOO_WEAK, SUN_DIVE, SUN_FALL, HOP }
+        ROUTE, ESCAPE, LEAVE, INTER_PLAN, INTER_WAIT, HELIO, ARRIVE, SETTLE, NODE_WAIT, TOO_WEAK, SUN_DIVE, SUN_FALL, HOP,
+        DOCK_PLAN, DOCK_WAIT, DOCK_COAST, DOCK_CLOSE, DOCK_ALIGN, DOCK_IN }
 
     /** Seconds after the transfer burn before checking the aim (far out, aim is easier to fix). */
     private static final double CORRECTION_DELAY = 600;
@@ -101,6 +111,20 @@ public final class Autopilot {
     /** Excess velocity the departure burn is aiming for (ecliptic frame); zero for other burns. */
     private DVec3 departureExcess = DVec3.ZERO;
     private int steerCheck;
+    // Docking (saved): the other ship (its id, or its cell while parked), which port of ours meets
+    // which of theirs (blocks from each ship's origin), and the meeting being flown.
+    private java.util.UUID dockId;
+    private int dockCell = -1;
+    private net.minecraft.core.BlockPos myPort = net.minecraft.core.BlockPos.ZERO;
+    private net.minecraft.core.BlockPos theirPort = net.minecraft.core.BlockPos.ZERO;
+    private double dockDepart;
+    private double dockArrive;
+    private int dockCorrections;
+    /** Out in front of their port, on its axis (from here it's straight in). */
+    private boolean dockOnAxis;
+    private java.util.concurrent.CompletableFuture<RendezvousPlanner.Plan> dockPlanning;
+    /** How the last docking step stood (logs). */
+    private String dockDebug = "";
 
     public Program program() {
         return program;
@@ -123,7 +147,7 @@ public final class Autopilot {
             return "";
         }
         var system = ServerUniverse.system();
-        CelestialBody end = system.body(program == Program.TRAVEL ? finalDestination : destination);
+        CelestialBody end = system.body(travelling() ? finalDestination : destination);
         if (end == null) {
             return "";
         }
@@ -162,6 +186,9 @@ public final class Autopilot {
             b.append(String.format(java.util.Locale.ROOT, " pe %.0f ap %.0f down in %.0f miss %.0f turns %d warp %.0f %s",
                     orbit.periapsis() - body.radius(), orbit.apoapsis() - body.radius(), deorbitAt - vessel.orbital().time(),
                     siteMiss, siteTurns, com.thepearlking.stevespace.universe.UniverseClock.get(vessel.level().getServer()).warp(), siteWhy));
+        }
+        if (program == Program.DOCK) {
+            b.append(' ').append(dockDebug);
         }
         if (phase == Phase.HELIO && vessel.orbital() != null) {
             var system = ServerUniverse.system();
@@ -218,6 +245,7 @@ public final class Autopilot {
             case APPROACH -> vessel.orbital() != null ? Phase.APPROACH : Phase.NO_TARGET;
             case TRAVEL -> vessel.orbital() != null ? Phase.ROUTE : Phase.CLIMB;
             case NODE -> vessel.orbital() != null ? Phase.NODE_WAIT : Phase.NO_TRANSFER;
+            case DOCK -> vessel.orbital() != null ? Phase.ROUTE : Phase.CLIMB;
             case OFF, UNDOCK -> Phase.DONE;
         };
         if (program == Program.MOON && body != null) {
@@ -333,6 +361,16 @@ public final class Autopilot {
         tag.putDouble("vix", departureExcess.x());
         tag.putDouble("viy", departureExcess.y());
         tag.putDouble("viz", departureExcess.z());
+        if (dockId != null) {
+            tag.putUUID("dockId", dockId);
+        }
+        tag.putInt("dockCell", dockCell);
+        tag.putLong("myPort", myPort.asLong());
+        tag.putLong("theirPort", theirPort.asLong());
+        tag.putDouble("dockDepart", dockDepart);
+        tag.putDouble("dockArrive", dockArrive);
+        tag.putInt("dockCorrections", dockCorrections);
+        tag.putBoolean("dockOnAxis", dockOnAxis);
         return tag;
     }
 
@@ -364,6 +402,17 @@ public final class Autopilot {
             helioStart = tag.getDouble("helioStart");
             helioCorrections = tag.getInt("helioCorrections");
             departureExcess = new DVec3(tag.getDouble("vix"), tag.getDouble("viy"), tag.getDouble("viz"));
+            dockId = tag.hasUUID("dockId") ? tag.getUUID("dockId") : null;
+            dockCell = tag.contains("dockCell") ? tag.getInt("dockCell") : -1;
+            myPort = net.minecraft.core.BlockPos.of(tag.getLong("myPort"));
+            theirPort = net.minecraft.core.BlockPos.of(tag.getLong("theirPort"));
+            dockDepart = tag.getDouble("dockDepart");
+            dockArrive = tag.getDouble("dockArrive");
+            dockCorrections = tag.getInt("dockCorrections");
+            dockOnAxis = tag.getBoolean("dockOnAxis");
+            if (phase == Phase.DOCK_PLAN) {
+                dockPlanning = null;
+            }
             if (phase == Phase.INTER_PLAN || phase == Phase.PLAN) {
                 // A plan being worked out when saved: work it out again.
                 interPlanning = null;
@@ -377,6 +426,11 @@ public final class Autopilot {
     public void stop() {
         program = Program.OFF;
         phase = Phase.DONE;
+    }
+
+    /** Programs that fly the route to another world (docking flies to the other ship's first). */
+    private boolean travelling() {
+        return program == Program.TRAVEL || program == Program.DOCK;
     }
 
     private static CelestialBody bodyOf(VesselEntity vessel) {
@@ -397,7 +451,7 @@ public final class Autopilot {
         double mu = body.mu() * gravityScale;
         if (vessel.orbital() == null && needsOrbit(phase)) {
             // Dropped into the air (or never left it): these steps only make sense in orbit.
-            if (program == Program.TRAVEL) {
+            if (travelling()) {
                 phase = Phase.ROUTE;
             } else {
                 phase = Phase.NO_TRANSFER;
@@ -428,11 +482,22 @@ public final class Autopilot {
             case SUN_DIVE -> sunDive(vessel, body, mu);
             case SUN_FALL -> sunFall(vessel, body, mu);
             case HOP -> hop(vessel, body, mu);
+            case DOCK_PLAN -> dockPlan(vessel, body, mu);
+            case DOCK_WAIT -> dockWait(vessel, body, mu);
+            case DOCK_COAST -> dockCoast(vessel, body, mu);
+            case DOCK_CLOSE -> dockClose(vessel, body, mu);
+            case DOCK_ALIGN -> dockFinal(vessel, body, mu, false);
+            case DOCK_IN -> dockFinal(vessel, body, mu, true);
             case NO_TARGET, NO_TRANSFER, TOO_WEAK, DONE -> null;
         };
         // Flying anywhere: each step that finishes hands back to the route for the next one.
-        if (program == Program.TRAVEL && phase == Phase.DONE && !finished) {
+        if (travelling() && phase == Phase.DONE && !finished) {
             phase = Phase.ROUTE;
+        }
+        // Docking: once in orbit round the right body, go and meet the other ship.
+        if (program == Program.DOCK && finished && phase == Phase.DONE) {
+            finished = false;
+            phase = Phase.DOCK_PLAN;
         }
         if (phase == Phase.DONE || phase == Phase.NO_TRANSFER || phase == Phase.NO_TARGET) {
             warp(vessel, 1);
@@ -445,7 +510,8 @@ public final class Autopilot {
 
     private static boolean needsOrbit(Phase phase) {
         return switch (phase) {
-            case ESCAPE, LEAVE, INTER_PLAN, INTER_WAIT, HELIO, ARRIVE, SETTLE, PLAN, WAIT_BURN, CRUISE, APPROACH, NODE_WAIT, SUN_DIVE, SUN_FALL -> true;
+            case ESCAPE, LEAVE, INTER_PLAN, INTER_WAIT, HELIO, ARRIVE, SETTLE, PLAN, WAIT_BURN, CRUISE, APPROACH, NODE_WAIT, SUN_DIVE, SUN_FALL,
+                    DOCK_PLAN, DOCK_WAIT, DOCK_COAST, DOCK_CLOSE, DOCK_ALIGN, DOCK_IN -> true;
             default -> false;
         };
     }
@@ -457,6 +523,9 @@ public final class Autopilot {
 
     /** The message for a program that couldn't run. */
     public String failureKey() {
+        if (program == Program.DOCK && phase == Phase.NO_TARGET) {
+            return "stevespace.autopilot.dock_lost";
+        }
         return phase == Phase.NO_TARGET ? "stevespace.autopilot.no_target"
                 : phase == Phase.TOO_WEAK ? "stevespace.autopilot.too_weak" : "stevespace.autopilot.no_transfer";
     }
@@ -502,6 +571,323 @@ public final class Autopilot {
         }
         double throttle = Math.max(0.03, Math.min(1, error.length() / Math.max(0.01, vessel.maxAcceleration()) * 2));
         return new Command(now.toWorld().apply(error.normalize()), throttle);
+    }
+
+    // ---------------------------------------------------------------------------------------
+    // Docking with another ship (or a station), from wherever this one is
+    // ---------------------------------------------------------------------------------------
+
+    /** Face to face distance (blocks) to line up at before closing in. */
+    private static final double DOCK_HOLD = 8;
+    /** Closing speed for the last metres (m/s). */
+    private static final double DOCK_SPEED = 0.3;
+
+    /**
+     * Flies to the ship {@code id} (or the one parked in {@code cell}) and docks port {@code mine}
+     * of this ship to its port {@code theirs} (blocks from each ship's origin). Gets to orbit, or
+     * to the other ship's world, first if it has to.
+     */
+    public void startDock(VesselEntity vessel, java.util.UUID id, int cell, net.minecraft.core.BlockPos mine, net.minecraft.core.BlockPos theirs) {
+        dockId = id;
+        dockCell = cell;
+        myPort = mine;
+        theirPort = theirs;
+        dockCorrections = 0;
+        dockPlanning = null;
+        dockOnAxis = false;
+        DockTarget target = DockTarget.find(vessel, id, cell);
+        if (target == null) {
+            program = Program.DOCK;
+            phase = Phase.NO_TARGET;
+            return;
+        }
+        finalDestination = target.body().id();
+        landAtEnd = false;
+        siteLat = Double.NaN;
+        siteLon = Double.NaN;
+        start(Program.DOCK, vessel);
+    }
+
+    /** Works out when and how to set off to meet the other ship (or goes straight to it when close). */
+    private Command dockPlan(VesselEntity vessel, CelestialBody body, double mu) {
+        Trajectory now = Trajectory.of(vessel, body, mu);
+        DockTarget target = DockTarget.find(vessel, dockId, dockCell);
+        if (target == null) {
+            phase = Phase.NO_TARGET;
+            return new Command(now.prograde(), 0);
+        }
+        if (!target.body().id().equals(body.id())) {
+            finalDestination = target.body().id();
+            phase = Phase.ROUTE; // it's round another world: go there first
+            return new Command(now.prograde(), 0);
+        }
+        warp(vessel, 1);
+        OrbitalFlight o = vessel.orbital();
+        StateVector own = o.state();
+        StateVector other = target.state(o.time());
+        double distance = other.position().sub(own.position()).length();
+        double closing = other.velocity().sub(own.velocity()).length();
+        if (distance < 2500 && closing < 40) {
+            dockOnAxis = false;
+            phase = Phase.DOCK_CLOSE;
+            return new Command(now.prograde(), 0);
+        }
+        if (dockPlanning == null) {
+            double t = o.time();
+            double floor = body.radius() + VesselTransfer.spaceAltitude(body) + 100;
+            dockPlanning = java.util.concurrent.CompletableFuture.supplyAsync(() -> RendezvousPlanner.plan(own, t, other, t, mu, floor));
+        } else if (dockPlanning.isDone()) {
+            RendezvousPlanner.Plan plan = dockPlanning.getNow(null);
+            dockPlanning = null;
+            if (plan == null) {
+                phase = Phase.NO_TRANSFER;
+                return new Command(now.prograde(), 0);
+            }
+            StevesSpace.LOGGER.info("Docking: meet {} in {} s ({} m/s now, {} m/s on arrival)", target.name(),
+                    String.format("%.0f", plan.arriveTime() - o.time()), String.format("%.1f", plan.deltaV().length()),
+                    String.format("%.1f", plan.arrivalSpeed()));
+            burnTime = plan.departTime();
+            burnDeltaV = plan.deltaV().length();
+            correctionDirection = plan.deltaV().normalize();
+            correctionLeft = plan.deltaV().length();
+            afterBurn = Phase.DOCK_COAST;
+            dockDepart = plan.departTime();
+            dockArrive = plan.arriveTime();
+            dockCorrections = 0;
+            phase = Phase.DOCK_WAIT;
+        }
+        return new Command(now.prograde(), 0);
+    }
+
+    /** Waiting for the moment to set off: facing the burn, warping toward it. */
+    private Command dockWait(VesselEntity vessel, CelestialBody body, double mu) {
+        Trajectory now = Trajectory.of(vessel, body, mu);
+        double duration = burnDeltaV / Math.max(0.01, vessel.maxAcceleration());
+        double until = burnTime - duration / 2 - vessel.orbital().time();
+        DVec3 direction = now.toWorld().apply(correctionDirection);
+        if (until > 40 && vessel.alignment(direction) > 0.99) {
+            warpToward(vessel, until - 30);
+        } else {
+            warp(vessel, 1);
+        }
+        if (until <= 0) {
+            steerCheck = Integer.MAX_VALUE;
+            phase = Phase.CORRECTION;
+        }
+        return new Command(direction, 0);
+    }
+
+    /** On the way: a correction or two, warping between, until the other ship is near. */
+    private Command dockCoast(VesselEntity vessel, CelestialBody body, double mu) {
+        Trajectory now = Trajectory.of(vessel, body, mu);
+        DockTarget target = DockTarget.find(vessel, dockId, dockCell);
+        if (target == null) {
+            phase = Phase.NO_TARGET;
+            return new Command(now.prograde(), 0);
+        }
+        OrbitalFlight o = vessel.orbital();
+        double t = o.time();
+        double toGo = dockArrive - t;
+        double distance = target.state(t).position().sub(o.state().position()).length();
+        if (distance < 2000 || toGo < 20) {
+            warp(vessel, 1);
+            dockOnAxis = false;
+            phase = toGo < -120 && distance > 4000 ? Phase.DOCK_PLAN : Phase.DOCK_CLOSE; // missed it: plan again
+            return new Command(now.retrograde(), 0);
+        }
+        double[] checks = {(dockDepart + dockArrive) / 2, dockArrive - Math.min(240, (dockArrive - dockDepart) / 4)};
+        if (dockCorrections < checks.length && t >= checks[dockCorrections]) {
+            dockCorrections++;
+            DVec3 aim = target.state(dockArrive).position();
+            DVec3 dv = RendezvousPlanner.correction(o.state(), t, aim, dockArrive, mu);
+            if (dv != null && dv.length() > 0.3 && dv.length() < 400) {
+                correctionDirection = dv.normalize();
+                correctionLeft = dv.length();
+                afterBurn = Phase.DOCK_COAST;
+                steerCheck = Integer.MAX_VALUE;
+                phase = Phase.CORRECTION;
+                return new Command(now.toWorld().apply(correctionDirection), 0);
+            }
+        }
+        double next = dockCorrections < checks.length ? checks[dockCorrections] - t : toGo - 20;
+        warpToward(vessel, Math.min(next, toGo - 20) - 10);
+        return new Command(now.prograde(), 0);
+    }
+
+    /**
+     * Near the other ship: match its speed and come round in front of its port (on its axis, a
+     * few blocks out), then hold there. With RCS thrusters the last stretch is flown with those,
+     * already turned to dock.
+     */
+    private Command dockClose(VesselEntity vessel, CelestialBody body, double mu) {
+        Trajectory now = Trajectory.of(vessel, body, mu);
+        warp(vessel, 1);
+        DockTarget target = DockTarget.find(vessel, dockId, dockCell);
+        if (target == null) {
+            phase = Phase.NO_TARGET;
+            return new Command(now.prograde(), 0);
+        }
+        OrbitalFlight o = vessel.orbital();
+        StateVector own = o.state();
+        StateVector other = target.state(o.time());
+        DVec3 rel = own.velocity().sub(other.velocity());
+        DVec3 toOther = other.position().sub(own.position());
+        if (toOther.length() > 6000) {
+            phase = Phase.DOCK_PLAN; // drifted far off: plan it again
+            return new Command(now.prograde(), 0);
+        }
+        Ports ports = ports(vessel, target);
+        DVec3 goal;
+        Quaterniond attitude = null;
+        if (ports == null) {
+            // Still parked (it wakes up as we come near): close in on it, keeping a little off.
+            goal = other.position().add(toOther.length() > 1 ? toOther.normalize().scale(-150) : DVec3.Y.scale(150));
+        } else {
+            attitude = ports.attitude();
+            double clearance = target.vessel().stats().radius() + vessel.stats().radius() + 4;
+            DVec3 hold = ports.comFor(DOCK_HOLD);
+            DVec3 corridor = ports.comFor(DOCK_HOLD + clearance);
+            DVec3 offAxis = own.position().sub(ports.face());
+            double out = offAxis.dot(ports.direction());
+            double side = offAxis.sub(ports.direction().scale(out)).length();
+            if (!dockOnAxis && out > DOCK_HOLD && side < 3) {
+                dockOnAxis = true;
+            }
+            goal = dockOnAxis ? hold : DockGeometry.around(own.position(), corridor, other.position(), clearance);
+            if (dockOnAxis && own.position().sub(hold).length() < 1.5 && rel.length() < 0.15) {
+                phase = Phase.DOCK_ALIGN;
+                return new Command(now.prograde(), 0);
+            }
+        }
+        DVec3 toGoal = goal.sub(own.position());
+        double distance = toGoal.length();
+        dockDebug = String.format(java.util.Locale.ROOT, "to goal %.1f rel %.2f on axis %b ports %b", distance, rel.length(), dockOnAxis, ports != null);
+        // Quick from afar, gently near (and never faster than it can stop).
+        double stop = Math.sqrt(2 * Math.max(0.05, vessel.maxAcceleration() * 0.5) * distance);
+        double speed = Math.min(Math.min(20, distance / 15), stop);
+        DVec3 wanted = distance > 0.01 ? toGoal.scale(speed / distance) : DVec3.ZERO;
+        DVec3 error = wanted.sub(rel);
+        double rcs = vessel.dockAcceleration();
+        if (toOther.length() < 120 && error.length() < Math.max(rcs * 6, 0.5)) {
+            // Close in: the RCS thrusters push, the ship turns to its docking attitude meanwhile.
+            DVec3 push = clampLength(error.scale(1.5), rcs * 0.9);
+            return new Command(now.prograde(), 0, now.toWorld().apply(push),
+                    attitude == null ? null : vessel.worldOrientation(attitude));
+        }
+        double deadband = 0.08;
+        if (error.length() < deadband) {
+            return attitude != null
+                    ? new Command(now.prograde(), 0, null, vessel.worldOrientation(attitude))
+                    : new Command(now.toWorld().apply(error.length() > 1e-6 ? error.normalize() : now.prograde()), 0);
+        }
+        double throttle = Math.max(0.02, Math.min(1, error.length() / Math.max(0.01, vessel.maxAcceleration()) * 2));
+        return new Command(now.toWorld().apply(error.normalize()), throttle);
+    }
+
+    /**
+     * Lined up in front of the port: turn square to it and hold there ({@code in} false), then
+     * close in slowly until the ports meet and join ({@code in} true).
+     */
+    private Command dockFinal(VesselEntity vessel, CelestialBody body, double mu, boolean in) {
+        Trajectory now = Trajectory.of(vessel, body, mu);
+        warp(vessel, 1);
+        DockTarget target = DockTarget.find(vessel, dockId, dockCell);
+        if (target == null || target.vessel() == null) {
+            // It joined with us (we were the bigger ship and took it in), or it's gone.
+            phase = in && target == null ? Phase.DONE : Phase.NO_TARGET;
+            return new Command(now.prograde(), 0);
+        }
+        Ports ports = ports(vessel, target);
+        if (ports == null) {
+            phase = Phase.DONE; // our port is joined to theirs now
+            return new Command(now.prograde(), 0);
+        }
+        OrbitalFlight o = vessel.orbital();
+        StateVector own = o.state();
+        StateVector other = target.state(o.time());
+        DVec3 rel = own.velocity().sub(other.velocity());
+        DVec3 dir = ports.direction();
+        // Where our port's face is now, against where it should be.
+        DVec3 myFace = vessel.portFaceInertial(ports.mine());
+        DVec3 spot = ports.face().add(dir.scale(in ? 0 : DOCK_HOLD));
+        DVec3 error = spot.sub(myFace);
+        double along = error.dot(dir);
+        DVec3 lateral = error.sub(dir.scale(along));
+        double turnedOff = DockGeometry.angle(vessel.inertialOrientation(), ports.attitude());
+        // Wanted motion: square up sideways first, then along the axis.
+        DVec3 wanted = clampLength(lateral.scale(0.4), 0.6);
+        double gap = myFace.sub(ports.face()).dot(dir);
+        if (in) {
+            if (gap < -1.5) {
+                phase = Phase.DOCK_ALIGN; // went past: back out and line up again
+            }
+            if (lateral.length() < 0.35 && turnedOff < Math.toRadians(6)) {
+                wanted = wanted.add(dir.scale(-Math.min(DOCK_SPEED, Math.max(0.08, gap * 0.15))));
+            }
+        } else {
+            wanted = wanted.add(dir.scale(Math.max(-0.8, Math.min(0.8, along * 0.3))));
+            if (turnedOff < Math.toRadians(2.5) && lateral.length() < 0.25 && Math.abs(along) < 0.6 && rel.length() < 0.1) {
+                phase = Phase.DOCK_IN;
+            }
+        }
+        DVec3 change = wanted.sub(rel);
+        dockDebug = String.format(java.util.Locale.ROOT, "gap %.2f along %.2f side %.2f turned %.1f rel %.3f",
+                gap, along, lateral.length(), Math.toDegrees(turnedOff), rel.length());
+        Quaterniond hold = vessel.worldOrientation(ports.attitude());
+        double rcs = vessel.dockAcceleration();
+        return new Command(now.prograde(), 0, now.toWorld().apply(clampLength(change.scale(1.5), rcs * 0.9)), hold);
+    }
+
+    private static DVec3 clampLength(DVec3 v, double most) {
+        double length = v.length();
+        return length > most && length > 0 ? v.scale(most / length) : v;
+    }
+
+    /** Our port and theirs, where theirs is and points, and how we must turn to meet it. */
+    private record Ports(VesselStats.Port mine, VesselStats.Port theirs, DVec3 face, DVec3 direction, Quaterniond attitude,
+                         DVec3 portOffset) {
+
+        /** Where our centre of mass is when our port's face is {@code gap} blocks out from theirs. */
+        DVec3 comFor(double gap) {
+            return face.add(direction.scale(gap)).sub(portOffset);
+        }
+    }
+
+    private Ports ports(VesselEntity vessel, DockTarget target) {
+        VesselEntity other = target.vessel();
+        if (other == null || other.orbital() == null) {
+            return null;
+        }
+        VesselStats.Port mine = portAt(vessel, myPort);
+        VesselStats.Port theirs = portAt(other, theirPort);
+        if (mine == null || theirs == null) {
+            return null;
+        }
+        double dt = vessel.orbital().time() - other.orbital().time();
+        DVec3 drift = other.orbital().state().velocity().scale(dt);
+        DVec3 face = other.portFaceInertial(theirs).add(drift);
+        DVec3 direction = other.portDirectionInertial(theirs).normalize();
+        Quaterniond attitude = DockGeometry.dockAttitude(vessel.inertialOrientation(), other.inertialOrientation(), mine.facing(), theirs.facing());
+        if (attitude == null) {
+            return null;
+        }
+        // Our port's face from our centre of mass, once turned to dock.
+        var com = vessel.stats().centerOfMass();
+        DVec3 offset = DockGeometry.turn(attitude, mine.pos().getX() + 0.5 + mine.facing().getStepX() * 0.5 - com.x,
+                mine.pos().getY() + 0.5 + mine.facing().getStepY() * 0.5 - com.y,
+                mine.pos().getZ() + 0.5 + mine.facing().getStepZ() * 0.5 - com.z);
+        return new Ports(mine, theirs, face, direction, attitude, offset);
+    }
+
+    /** The free docking port at {@code pos} on a ship (null if there's none, or it's joined already). */
+    private static VesselStats.Port portAt(VesselEntity vessel, net.minecraft.core.BlockPos pos) {
+        for (VesselStats.Port p : vessel.stats().ports()) {
+            if (p.pos().equals(pos)) {
+                var next = vessel.structure().get(pos.relative(p.facing()));
+                return next == null ? p : null;
+            }
+        }
+        return null;
     }
 
     // ---------------------------------------------------------------------------------------
@@ -1091,7 +1477,7 @@ public final class Autopilot {
         double t = vessel.orbital().time();
         double total = Math.max(1, arriveTime - helioStart);
         if (t > arriveTime + total * 0.3) {
-            phase = program == Program.TRAVEL ? Phase.ROUTE : Phase.NO_TRANSFER; // went past without meeting it
+            phase = travelling() ? Phase.ROUTE : Phase.NO_TRANSFER; // went past without meeting it
             return new Command(now.prograde(), 0);
         }
         double[] at = {0.01, 0.5, 0.88};
@@ -1128,7 +1514,7 @@ public final class Autopilot {
         if (closing <= 0.01 && gap > 0 && t > planned) {
             com.thepearlking.stevespace.StevesSpace.LOGGER.info("Autopilot missed {} by {} km: planning again", target.id(), (long) gap);
             warp(vessel, 1);
-            phase = program == Program.TRAVEL ? Phase.ROUTE : Phase.NO_TRANSFER;
+            phase = travelling() ? Phase.ROUTE : Phase.NO_TRANSFER;
             return new Command(now.prograde(), 0);
         }
         // Running a little late (small worlds pull too weakly to keep to the plan's minute) is no

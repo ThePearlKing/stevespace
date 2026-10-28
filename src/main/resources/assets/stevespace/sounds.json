@@ -266,5 +266,22 @@
         "stream": false
       }
     ]
+  },
+  "rcs_puff": {
+    "subtitle": "subtitles.stevespace.rcs_puff",
+    "sounds": [
+      {
+        "name": "stevespace:rcs_puff_1",
+        "stream": false
+      },
+      {
+        "name": "stevespace:rcs_puff_2",
+        "stream": false
+      },
+      {
+        "name": "stevespace:rcs_puff_3",
+        "stream": false
+      }
+    ]
   }
 }

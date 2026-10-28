@@ -28,6 +28,7 @@
     "stevespace:launch_pad",
     "stevespace:fuel_loader",
     "stevespace:docking_port",
+    "stevespace:rcs_thruster",
     "stevespace:telescope",
     "stevespace:flight_display",
     "stevespace:oxygen_generator",

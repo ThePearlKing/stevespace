@@ -34,9 +34,23 @@ public final class ParkedShips extends SavedData {
      * @param min    lowest corner of its blocks (world coordinates)
      * @param max    highest corner of its blocks
      * @param anchor the point in the cell that moves along the orbit (blocks are placed around it)
+     * @param id     the ship's own id (it keeps it when it flies again), or null
+     * @param owner  who launched it, or null (anyone's)
      */
     public record Parked(int cell, String body, StateVector state, double time, String name, BlockPos min, BlockPos max,
-                         DVec3 anchor) {
+                         DVec3 anchor, java.util.UUID id, java.util.UUID owner) {
+
+        public Parked(int cell, String body, StateVector state, double time, String name, BlockPos min, BlockPos max, DVec3 anchor) {
+            this(cell, body, state, time, name, min, max, anchor, null, null);
+        }
+
+        public Parked withName(String name) {
+            return new Parked(cell, body, state, time, name, min, max, anchor, id, owner);
+        }
+
+        public Parked withBounds(BlockPos min, BlockPos max) {
+            return new Parked(cell, body, state, time, name, min, max, anchor, id, owner);
+        }
 
         public boolean contains(double x, double y, double z, double margin) {
             return x >= min.getX() - margin && x <= max.getX() + 1 + margin
@@ -82,7 +96,7 @@ public final class ParkedShips extends SavedData {
         }
         BlockPos min = new BlockPos(Math.min(p.min().getX(), pos.getX()), Math.min(p.min().getY(), pos.getY()), Math.min(p.min().getZ(), pos.getZ()));
         BlockPos max = new BlockPos(Math.max(p.max().getX(), pos.getX()), Math.max(p.max().getY(), pos.getY()), Math.max(p.max().getZ(), pos.getZ()));
-        ships.put(cell, new Parked(p.cell(), p.body(), p.state(), p.time(), p.name(), min, max, p.anchor()));
+        ships.put(cell, p.withBounds(min, max));
         setDirty();
     }
 
@@ -100,7 +114,8 @@ public final class ParkedShips extends SavedData {
             CompoundTag s = (CompoundTag) t;
             data.ships.put(s.getInt("cell"), new Parked(s.getInt("cell"), s.getString("body"),
                     new StateVector(vec(s, "r"), vec(s, "v")), s.getDouble("time"), s.getString("name"),
-                    BlockPos.of(s.getLong("min")), BlockPos.of(s.getLong("max")), vec(s, "anchor")));
+                    BlockPos.of(s.getLong("min")), BlockPos.of(s.getLong("max")), vec(s, "anchor"),
+                    s.hasUUID("id") ? s.getUUID("id") : null, s.hasUUID("owner") ? s.getUUID("owner") : null));
         }
         return data;
     }
@@ -119,6 +134,12 @@ public final class ParkedShips extends SavedData {
             s.putLong("min", p.min().asLong());
             s.putLong("max", p.max().asLong());
             putVec(s, "anchor", p.anchor());
+            if (p.id() != null) {
+                s.putUUID("id", p.id());
+            }
+            if (p.owner() != null) {
+                s.putUUID("owner", p.owner());
+            }
             list.add(s);
         }
         tag.put("ships", list);

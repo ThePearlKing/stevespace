@@ -1,0 +1,488 @@
+{
+  "parent": "minecraft:block/block",
+  "render_type": "minecraft:cutout",
+  "textures": {
+    "particle": "stevespace:block/hull_white",
+    "plate": "stevespace:block/hull_dark",
+    "body": "stevespace:block/hull_white",
+    "nozzle": "stevespace:block/engine_bell"
+  },
+  "elements": [
+    {
+      "from": [
+        4,
+        0,
+        4
+      ],
+      "to": [
+        12,
+        2,
+        12
+      ],
+      "faces": {
+        "north": {
+          "texture": "#plate",
+          "uv": [
+            4,
+            14,
+            12,
+            16
+          ]
+        },
+        "south": {
+          "texture": "#plate",
+          "uv": [
+            4,
+            14,
+            12,
+            16
+          ]
+        },
+        "east": {
+          "texture": "#plate",
+          "uv": [
+            4,
+            14,
+            12,
+            16
+          ]
+        },
+        "west": {
+          "texture": "#plate",
+          "uv": [
+            4,
+            14,
+            12,
+            16
+          ]
+        },
+        "up": {
+          "texture": "#plate",
+          "uv": [
+            4,
+            4,
+            12,
+            12
+          ]
+        },
+        "down": {
+          "texture": "#plate",
+          "uv": [
+            4,
+            4,
+            12,
+            12
+          ]
+        }
+      }
+    },
+    {
+      "from": [
+        5.5,
+        2,
+        5.5
+      ],
+      "to": [
+        10.5,
+        8,
+        10.5
+      ],
+      "faces": {
+        "north": {
+          "texture": "#body",
+          "uv": [
+            5.5,
+            8,
+            10.5,
+            14
+          ]
+        },
+        "south": {
+          "texture": "#body",
+          "uv": [
+            5.5,
+            8,
+            10.5,
+            14
+          ]
+        },
+        "east": {
+          "texture": "#body",
+          "uv": [
+            5.5,
+            8,
+            10.5,
+            14
+          ]
+        },
+        "west": {
+          "texture": "#body",
+          "uv": [
+            5.5,
+            8,
+            10.5,
+            14
+          ]
+        },
+        "up": {
+          "texture": "#body",
+          "uv": [
+            5.5,
+            5.5,
+            10.5,
+            10.5
+          ]
+        },
+        "down": {
+          "texture": "#body",
+          "uv": [
+            5.5,
+            5.5,
+            10.5,
+            10.5
+          ]
+        }
+      }
+    },
+    {
+      "from": [
+        10.5,
+        5,
+        7
+      ],
+      "to": [
+        13,
+        7,
+        9
+      ],
+      "faces": {
+        "north": {
+          "texture": "#nozzle",
+          "uv": [
+            10.5,
+            9,
+            13,
+            11
+          ]
+        },
+        "south": {
+          "texture": "#nozzle",
+          "uv": [
+            10.5,
+            9,
+            13,
+            11
+          ]
+        },
+        "east": {
+          "texture": "#nozzle",
+          "uv": [
+            7,
+            9,
+            9,
+            11
+          ]
+        },
+        "west": {
+          "texture": "#nozzle",
+          "uv": [
+            7,
+            9,
+            9,
+            11
+          ]
+        },
+        "up": {
+          "texture": "#nozzle",
+          "uv": [
+            10.5,
+            7,
+            13,
+            9
+          ]
+        },
+        "down": {
+          "texture": "#nozzle",
+          "uv": [
+            10.5,
+            7,
+            13,
+            9
+          ]
+        }
+      }
+    },
+    {
+      "from": [
+        3,
+        5,
+        7
+      ],
+      "to": [
+        5.5,
+        7,
+        9
+      ],
+      "faces": {
+        "north": {
+          "texture": "#nozzle",
+          "uv": [
+            3,
+            9,
+            5.5,
+            11
+          ]
+        },
+        "south": {
+          "texture": "#nozzle",
+          "uv": [
+            3,
+            9,
+            5.5,
+            11
+          ]
+        },
+        "east": {
+          "texture": "#nozzle",
+          "uv": [
+            7,
+            9,
+            9,
+            11
+          ]
+        },
+        "west": {
+          "texture": "#nozzle",
+          "uv": [
+            7,
+            9,
+            9,
+            11
+          ]
+        },
+        "up": {
+          "texture": "#nozzle",
+          "uv": [
+            3,
+            7,
+            5.5,
+            9
+          ]
+        },
+        "down": {
+          "texture": "#nozzle",
+          "uv": [
+            3,
+            7,
+            5.5,
+            9
+          ]
+        }
+      }
+    },
+    {
+      "from": [
+        7,
+        5,
+        3
+      ],
+      "to": [
+        9,
+        7,
+        5.5
+      ],
+      "faces": {
+        "north": {
+          "texture": "#nozzle",
+          "uv": [
+            7,
+            9,
+            9,
+            11
+          ]
+        },
+        "south": {
+          "texture": "#nozzle",
+          "uv": [
+            7,
+            9,
+            9,
+            11
+          ]
+        },
+        "east": {
+          "texture": "#nozzle",
+          "uv": [
+            3,
+            9,
+            5.5,
+            11
+          ]
+        },
+        "west": {
+          "texture": "#nozzle",
+          "uv": [
+            3,
+            9,
+            5.5,
+            11
+          ]
+        },
+        "up": {
+          "texture": "#nozzle",
+          "uv": [
+            7,
+            3,
+            9,
+            5.5
+          ]
+        },
+        "down": {
+          "texture": "#nozzle",
+          "uv": [
+            7,
+            3,
+            9,
+            5.5
+          ]
+        }
+      }
+    },
+    {
+      "from": [
+        7,
+        5,
+        10.5
+      ],
+      "to": [
+        9,
+        7,
+        13
+      ],
+      "faces": {
+        "north": {
+          "texture": "#nozzle",
+          "uv": [
+            7,
+            9,
+            9,
+            11
+          ]
+        },
+        "south": {
+          "texture": "#nozzle",
+          "uv": [
+            7,
+            9,
+            9,
+            11
+          ]
+        },
+        "east": {
+          "texture": "#nozzle",
+          "uv": [
+            10.5,
+            9,
+            13,
+            11
+          ]
+        },
+        "west": {
+          "texture": "#nozzle",
+          "uv": [
+            10.5,
+            9,
+            13,
+            11
+          ]
+        },
+        "up": {
+          "texture": "#nozzle",
+          "uv": [
+            7,
+            10.5,
+            9,
+            13
+          ]
+        },
+        "down": {
+          "texture": "#nozzle",
+          "uv": [
+            7,
+            10.5,
+            9,
+            13
+          ]
+        }
+      }
+    },
+    {
+      "from": [
+        7,
+        8,
+        7
+      ],
+      "to": [
+        9,
+        10,
+        9
+      ],
+      "faces": {
+        "north": {
+          "texture": "#nozzle",
+          "uv": [
+            7,
+            6,
+            9,
+            8
+          ]
+        },
+        "south": {
+          "texture": "#nozzle",
+          "uv": [
+            7,
+            6,
+            9,
+            8
+          ]
+        },
+        "east": {
+          "texture": "#nozzle",
+          "uv": [
+            7,
+            6,
+            9,
+            8
+          ]
+        },
+        "west": {
+          "texture": "#nozzle",
+          "uv": [
+            7,
+            6,
+            9,
+            8
+          ]
+        },
+        "up": {
+          "texture": "#nozzle",
+          "uv": [
+            7,
+            7,
+            9,
+            9
+          ]
+        },
+        "down": {
+          "texture": "#nozzle",
+          "uv": [
+            7,
+            7,
+            9,
+            9
+          ]
+        }
+      }
+    }
+  ]
+}

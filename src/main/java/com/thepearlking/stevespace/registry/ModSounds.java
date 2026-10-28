@@ -47,6 +47,9 @@ public final class ModSounds {
             () -> SoundEvent.createVariableRangeEvent(ResourceLocation.fromNamespaceAndPath(StevesSpace.MODID, "giant_wind")));
     public static final RegistryObject<SoundEvent> HULL_CREAK = SOUNDS.register("hull_creak",
             () -> SoundEvent.createVariableRangeEvent(ResourceLocation.fromNamespaceAndPath(StevesSpace.MODID, "hull_creak")));
+    /** An RCS thruster valve firing: tick, hiss, knock. */
+    public static final RegistryObject<SoundEvent> RCS_PUFF = SOUNDS.register("rcs_puff",
+            () -> SoundEvent.createVariableRangeEvent(ResourceLocation.fromNamespaceAndPath(StevesSpace.MODID, "rcs_puff")));
 
     public static SoundEvent plasma(String name) {
         var sound = PLASMA.get(name);

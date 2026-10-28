@@ -50,7 +50,54 @@ public final class VesselEffects {
                     && vessel.distanceToSqr(mc.player) < EFFECT_RANGE * EFFECT_RANGE) {
                 exhaust(level, vessel);
             }
+            if (entity instanceof VesselEntity vessel && vessel.stats() != null && !vessel.stats().rcs().isEmpty()
+                    && vessel.rcsPushSynced().lengthSquared() > 0.0025f && vessel.distanceToSqr(mc.player) < EFFECT_RANGE * EFFECT_RANGE) {
+                rcs(mc, level, vessel);
+            }
         }
+    }
+
+    /**
+     * RCS thrusters firing: short jets of gas from each cluster, against the way the ship is
+     * being pushed, and the clatter of the valves (heard through the hull from aboard, or
+     * through the air).
+     */
+    private static void rcs(Minecraft mc, ClientLevel level, VesselEntity vessel) {
+        RandomSource random = level.random;
+        Vector3f push = vessel.rcsPushSynced();
+        float strength = Math.min(1, push.length());
+        boolean blocks = vessel.materialized();
+        Quaternionf q = blocks ? new Quaternionf() : vessel.renderOrientation(1f);
+        Vector3d mass = vessel.stats().centerOfMass();
+        Vector3f jet = q.transform(new Vector3f(push).normalize().negate());
+        for (VesselStats.Rcs thruster : vessel.stats().rcs()) {
+            Vector3f out = new Vector3f(thruster.facing().getStepX(), thruster.facing().getStepY(), thruster.facing().getStepZ());
+            Vector3f centre = new Vector3f(thruster.pos().getX() + 0.5f + out.x * 0.15f, thruster.pos().getY() + 0.5f + out.y * 0.15f,
+                    thruster.pos().getZ() + 0.5f + out.z * 0.15f);
+            Vec3 at = blocks ? Vec3.atLowerCornerOf(vessel.blockOrigin()).add(centre.x, centre.y, centre.z)
+                    : vessel.position().add(toVec(q.transform(new Vector3f((float) (centre.x - mass.x), (float) (centre.y - mass.y),
+                    (float) (centre.z - mass.z)))));
+            // A short, quickly fading jet (gas spreads out fast in a vacuum).
+            if (random.nextFloat() < 0.25f + 0.45f * strength) {
+                double speed = 0.12 + 0.08 * random.nextDouble();
+                level.addParticle(net.minecraft.core.particles.ParticleTypes.POOF,
+                        at.x + jet.x * 0.35, at.y + jet.y * 0.35, at.z + jet.z * 0.35,
+                        jet.x * speed + random.nextGaussian() * 0.015, jet.y * speed + random.nextGaussian() * 0.015,
+                        jet.z * speed + random.nextGaussian() * 0.015);
+            }
+        }
+        // The valves clatter in short bursts.
+        boolean aboard = VesselEntity.shipOf(mc.player) == vessel;
+        boolean air = !SpaceDimension.isSpace(level);
+        if ((aboard || air) && random.nextInt(4) == 0) {
+            float volume = (aboard ? 0.35f : 0.8f) * (0.5f + 0.5f * strength);
+            level.playLocalSound(vessel.getX(), vessel.getY(), vessel.getZ(), com.thepearlking.stevespace.registry.ModSounds.RCS_PUFF.get(),
+                    net.minecraft.sounds.SoundSource.NEUTRAL, volume, 0.9f + random.nextFloat() * 0.2f, false);
+        }
+    }
+
+    private static Vec3 toVec(Vector3f v) {
+        return new Vec3(v.x, v.y, v.z);
     }
 
     private static void exhaust(ClientLevel level, VesselEntity vessel) {

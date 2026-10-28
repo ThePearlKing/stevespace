@@ -13,7 +13,7 @@ public final class SpaceNetwork {
 
     public static final SimpleChannel CHANNEL = ChannelBuilder
             .named(ResourceLocation.fromNamespaceAndPath(StevesSpace.MODID, "main"))
-            .networkProtocolVersion(1)
+            .networkProtocolVersion(2)
             .simpleChannel();
 
     private SpaceNetwork() {
@@ -89,6 +89,12 @@ public final class SpaceNetwork {
         CHANNEL.messageBuilder(AutopilotC2S.class, NetworkDirection.PLAY_TO_SERVER)
                 .encoder(AutopilotC2S::encode).decoder(AutopilotC2S::decode)
                 .consumerMainThread(AutopilotC2S::handle).add();
+        CHANNEL.messageBuilder(DockC2S.class, NetworkDirection.PLAY_TO_SERVER)
+                .encoder(DockC2S::encode).decoder(DockC2S::decode)
+                .consumerMainThread(DockC2S::handle).add();
+        CHANNEL.messageBuilder(DockListS2C.class, NetworkDirection.PLAY_TO_CLIENT)
+                .encoder(DockListS2C::encode).decoder(DockListS2C::decode)
+                .consumerMainThread(DockListS2C::handle).add();
         CHANNEL.messageBuilder(RemoteTunerS2C.class, NetworkDirection.PLAY_TO_CLIENT)
                 .encoder(RemoteTunerS2C::encode).decoder(RemoteTunerS2C::decode)
                 .consumerMainThread(RemoteTunerS2C::handle).add();

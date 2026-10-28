@@ -1,28 +1,54 @@
 {
   "variants": {
-    "facing=up": {
+    "facing=up,sharing=false": {
       "model": "stevespace:block/docking_port"
     },
-    "facing=down": {
+    "facing=up,sharing=true": {
+      "model": "stevespace:block/docking_port_sharing"
+    },
+    "facing=down,sharing=false": {
       "model": "stevespace:block/docking_port",
       "x": 180
     },
-    "facing=north": {
+    "facing=down,sharing=true": {
+      "model": "stevespace:block/docking_port_sharing",
+      "x": 180
+    },
+    "facing=north,sharing=false": {
       "model": "stevespace:block/docking_port",
       "x": 90
     },
-    "facing=south": {
+    "facing=north,sharing=true": {
+      "model": "stevespace:block/docking_port_sharing",
+      "x": 90
+    },
+    "facing=south,sharing=false": {
       "model": "stevespace:block/docking_port",
       "x": 90,
       "y": 180
     },
-    "facing=east": {
+    "facing=south,sharing=true": {
+      "model": "stevespace:block/docking_port_sharing",
+      "x": 90,
+      "y": 180
+    },
+    "facing=east,sharing=false": {
       "model": "stevespace:block/docking_port",
       "x": 90,
       "y": 90
     },
-    "facing=west": {
+    "facing=east,sharing=true": {
+      "model": "stevespace:block/docking_port_sharing",
+      "x": 90,
+      "y": 90
+    },
+    "facing=west,sharing=false": {
       "model": "stevespace:block/docking_port",
+      "x": 90,
+      "y": 270
+    },
+    "facing=west,sharing=true": {
+      "model": "stevespace:block/docking_port_sharing",
       "x": 90,
       "y": 270
     }

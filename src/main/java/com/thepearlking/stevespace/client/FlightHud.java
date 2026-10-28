@@ -316,6 +316,12 @@ public final class FlightHud {
             g.drawString(font, text, x + WIDTH - font.width(text), y, 0xB0FFFFFF, true);
             return;
         }
+        if (FlightInput.rcsMode()) {
+            Component rcs = Component.translatable("hud.stevespace.keys_rcs", FlightKeys.THROTTLE_UP.getTranslatedKeyMessage(),
+                    FlightKeys.THROTTLE_DOWN.getTranslatedKeyMessage(), FlightKeys.RCS_MODE.getTranslatedKeyMessage());
+            g.drawString(font, rcs, x + WIDTH - font.width(rcs), y, 0xE0FFD966, true);
+            return;
+        }
         Component text = Component.translatable("hud.stevespace.keys",
                 FlightKeys.THROTTLE_UP.getTranslatedKeyMessage(), FlightKeys.THROTTLE_DOWN.getTranslatedKeyMessage(),
                 FlightKeys.AUTOPILOT.getTranslatedKeyMessage(), FlightKeys.MAP.getTranslatedKeyMessage(),

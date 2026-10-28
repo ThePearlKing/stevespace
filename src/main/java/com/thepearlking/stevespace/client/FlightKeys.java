@@ -32,6 +32,10 @@ public final class FlightKeys {
     // Not Q/E: those are vanilla's drop and inventory keys.
     public static final KeyMapping YAW_LEFT = key("yaw_left", GLFW.GLFW_KEY_LEFT);
     public static final KeyMapping YAW_RIGHT = key("yaw_right", GLFW.GLFW_KEY_RIGHT);
+    public static final KeyMapping PITCH_UP = key("pitch_up", GLFW.GLFW_KEY_UP);
+    public static final KeyMapping PITCH_DOWN = key("pitch_down", GLFW.GLFW_KEY_DOWN);
+    /** Switches the movement keys between steering (main engines) and RCS (pushing the ship about). */
+    public static final KeyMapping RCS_MODE = key("rcs_mode", GLFW.GLFW_KEY_B);
     public static final KeyMapping AUTOPILOT = key("autopilot", GLFW.GLFW_KEY_C);
     public static final KeyMapping WARP_FASTER = new KeyMapping("key.stevespace.warp_faster", KeyConflictContext.IN_GAME,
             InputConstants.Type.KEYSYM, GLFW.GLFW_KEY_PERIOD, CATEGORY);
@@ -63,6 +67,9 @@ public final class FlightKeys {
         event.register(THROTTLE_CUT);
         event.register(YAW_LEFT);
         event.register(YAW_RIGHT);
+        event.register(PITCH_UP);
+        event.register(PITCH_DOWN);
+        event.register(RCS_MODE);
         event.register(AUTOPILOT);
         event.register(LEAVE_SEAT);
         event.register(TELESCOPE_TARGETS);

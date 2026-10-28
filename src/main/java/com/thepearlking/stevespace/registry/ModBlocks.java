@@ -107,6 +107,8 @@ public final class ModBlocks {
 
     public static final RegistryObject<Block> DOCKING_PORT = register("docking_port",
             () -> new com.thepearlking.stevespace.block.DockingPortBlock(hull(MapColor.COLOR_LIGHT_GRAY).noOcclusion()));
+    public static final RegistryObject<Block> RCS_THRUSTER = register("rcs_thruster",
+            () -> new com.thepearlking.stevespace.block.RcsThrusterBlock(hull(MapColor.SNOW).noOcclusion()));
     public static final RegistryObject<Block> TELESCOPE = register("telescope",
             () -> new com.thepearlking.stevespace.block.TelescopeBlock(hull(MapColor.SNOW).noOcclusion()));
 

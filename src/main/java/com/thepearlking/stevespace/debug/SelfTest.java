@@ -57,6 +57,14 @@ public final class SelfTest {
                 ScanTests.run(server);
                 return;
             }
+            if ("dock".equals(System.getenv("STEVESPACE_SELFTEST_ONLY"))) {
+                DockTests.schedule(server);
+                return;
+            }
+            if ("dockquick".equals(System.getenv("STEVESPACE_SELFTEST_ONLY"))) {
+                DockTests.dock(server, !"0".equals(System.getenv("STEVESPACE_RCS")), 0.3, 300, 0);
+                return;
+            }
             if ("power".equals(System.getenv("STEVESPACE_SELFTEST_ONLY"))) {
                 PowerTests.schedule(server);
                 return;
@@ -2634,6 +2642,189 @@ public final class SelfTest {
                 var u = chase[1].orbital().state().velocity().sub(chase[0].orbital().state().velocity()).length();
                 check("approach-target", d < 35 && u < 0.6, String.format("distance %.1f, relative speed %.2f after %ds", d, u, ticks[0] / 20));
             });
+        }
+    }
+
+    /**
+     * Docking with the autopilot: a station parked in orbit, a crewed ship a few kilometres off in
+     * a different orbit picks it from the dock list, flies there and docks (with RCS thrusters,
+     * then a ship without any). Plus who's on the list, and power across docked ports.
+     */
+    static final class DockTests {
+
+        private static net.minecraft.world.level.block.state.BlockState port(net.minecraft.core.Direction facing) {
+            return com.thepearlking.stevespace.registry.ModBlocks.DOCKING_PORT.get().defaultBlockState()
+                    .setValue(com.thepearlking.stevespace.block.DockingPortBlock.FACING, facing);
+        }
+
+        /** A small station: a hull column with a radio rack and a port sticking out east. */
+        private static com.thepearlking.stevespace.vessel.VesselStructure station() {
+            var blocks = new java.util.HashMap<BlockPos, net.minecraft.world.level.block.state.BlockState>();
+            var hull = com.thepearlking.stevespace.registry.ModBlocks.HULL_WHITE.get().defaultBlockState();
+            for (int y = 0; y < 4; y++) {
+                blocks.put(new BlockPos(0, y, 0), hull);
+                blocks.put(new BlockPos(1, y, 0), hull);
+            }
+            blocks.put(new BlockPos(0, 4, 0), com.thepearlking.stevespace.registry.ModBlocks.RADIO_RACK.get().defaultBlockState());
+            blocks.put(new BlockPos(2, 2, 0), port(net.minecraft.core.Direction.EAST));
+            return new com.thepearlking.stevespace.vessel.VesselStructure(blocks, new java.util.HashMap<>());
+        }
+
+        /** The visiting ship: engine, tank, pilot seat, a port on the nose, and RCS round the tank. */
+        private static com.thepearlking.stevespace.vessel.VesselStructure chaser(boolean rcs) {
+            var blocks = new java.util.HashMap<BlockPos, net.minecraft.world.level.block.state.BlockState>();
+            blocks.put(new BlockPos(0, 0, 0), com.thepearlking.stevespace.registry.ModBlocks.ROCKET_ENGINE.get().defaultBlockState());
+            blocks.put(new BlockPos(0, 1, 0), com.thepearlking.stevespace.registry.ModBlocks.PROPELLANT_TANK.get().defaultBlockState());
+            blocks.put(new BlockPos(0, 2, 0), com.thepearlking.stevespace.registry.ModBlocks.PILOT_SEAT.get().defaultBlockState());
+            blocks.put(new BlockPos(0, 3, 0), com.thepearlking.stevespace.registry.ModBlocks.HULL_GREY.get().defaultBlockState());
+            blocks.put(new BlockPos(0, 4, 0), port(net.minecraft.core.Direction.UP));
+            if (rcs) {
+                for (var d : new net.minecraft.core.Direction[]{net.minecraft.core.Direction.NORTH, net.minecraft.core.Direction.SOUTH,
+                        net.minecraft.core.Direction.EAST, net.minecraft.core.Direction.WEST}) {
+                    blocks.put(new BlockPos(0, 1, 0).relative(d), com.thepearlking.stevespace.registry.ModBlocks.RCS_THRUSTER.get()
+                            .defaultBlockState().setValue(com.thepearlking.stevespace.block.RcsThrusterBlock.FACING, d));
+                }
+            }
+            return new com.thepearlking.stevespace.vessel.VesselStructure(blocks, new java.util.HashMap<>());
+        }
+
+        private static com.thepearlking.stevespace.universe.StateVector circular(double radius, double angle) {
+            double v = Math.sqrt(com.thepearlking.stevespace.universe.ServerUniverse.system().earth().mu()
+                    * com.thepearlking.stevespace.config.SpaceConfig.GRAVITY_SCALE.get() / radius);
+            return new com.thepearlking.stevespace.universe.StateVector(
+                    new com.thepearlking.stevespace.universe.DVec3(radius * Math.cos(angle), radius * Math.sin(angle), 0),
+                    new com.thepearlking.stevespace.universe.DVec3(-v * Math.sin(angle), v * Math.cos(angle), 0));
+        }
+
+        static void schedule(MinecraftServer server) {
+            listAndPower(server);
+            dock(server, true, 0.3, 4000, 200);
+            dock(server, false, 2.5, 4000, 200);
+        }
+
+        /** One docking run: the station at {@code angle} round the Earth, the ship {@code behind} blocks behind and {@code lower} lower. */
+        static void dock(MinecraftServer server, boolean rcs, double angle, double behind, double lower) {
+            String what = rcs ? "rcs" : "no-rcs";
+            final com.thepearlking.stevespace.vessel.VesselEntity[] ship = new com.thepearlking.stevespace.vessel.VesselEntity[1];
+            final java.util.UUID[] stationId = new java.util.UUID[1];
+            final net.minecraft.server.level.ServerPlayer[] pilot = new net.minecraft.server.level.ServerPlayer[1];
+            final int[] ticks = new int[1];
+            later(server, 2, () -> {
+                com.thepearlking.stevespace.universe.ServerUniverse.setWarp(server, 1);
+                ServerLevel space = server.getLevel(com.thepearlking.stevespace.world.SpaceDimension.KEY);
+                var earth = com.thepearlking.stevespace.universe.ServerUniverse.system().earth();
+                double r = earth.radius() + 3000;
+                var station = com.thepearlking.stevespace.vessel.VesselEntity.spawnInOrbit(space, station(), earth, circular(r, angle),
+                        new org.joml.Quaterniond());
+                station.setCustomName(net.minecraft.network.chat.Component.literal("Test Station " + what));
+                stationId[0] = station.getUUID();
+                station.park(null);
+                ship[0] = com.thepearlking.stevespace.vessel.VesselEntity.spawnInOrbit(space, chaser(rcs), earth,
+                        circular(r - lower, angle - behind / r), new org.joml.Quaterniond());
+                ship[0].setCustomName(net.minecraft.network.chat.Component.literal("Chaser " + what));
+                // A new pilot each run (the test world keeps the ships and players earlier runs left).
+                pilot[0] = VesselTests.mockPlayer(server.overworld(), "Dk" + (rcs ? "A" : "B") + Integer.toHexString(new java.util.Random().nextInt(0xFFFFFF)));
+                pilot[0].setGameMode(net.minecraft.world.level.GameType.CREATIVE);
+                pilot[0].teleportTo(space, ship[0].getX(), ship[0].getY() + 3, ship[0].getZ(), java.util.Set.of(), 0, 0);
+                pilot[0].startRiding(ship[0], true);
+            });
+            later(server, 40, () -> {
+                var list = com.thepearlking.stevespace.vessel.DockList.build(pilot[0]);
+                var entry = list.ships().stream().filter(e -> stationId[0].equals(e.id())).findFirst().orElse(null);
+                check("dock-list-has-parked-station-" + what, entry != null && !entry.ports().isEmpty() && !list.mine().isEmpty()
+                        && list.rcs() == rcs, "ships " + list.ships().size() + " mine " + list.mine().size() + " rcs " + list.rcs());
+                if (entry != null && !list.mine().isEmpty()) {
+                    com.thepearlking.stevespace.vessel.VesselServer.onDock(pilot[0], entry.id(), entry.cell(), list.mine().get(0).pos(),
+                            entry.ports().get(0).pos());
+                }
+            });
+            waitUntil(server, 20 * 900, () -> {
+                var own = com.thepearlking.stevespace.vessel.VesselEntity.shipOf(pilot[0], 2);
+                if (++ticks[0] % 100 == 0) {
+                    StevesSpace.LOGGER.info("[SelfTest] dock {} t={}s {} {}", what, ticks[0] / 20,
+                            own == null ? "no ship" : own.autopilotStatus(), own == null ? "" : own.autopilotDebug());
+                }
+                return own != null && own.structure().blocks().values().stream()
+                        .anyMatch(b -> b.is(com.thepearlking.stevespace.registry.ModBlocks.RADIO_RACK.get()));
+            }, () -> {
+                var own = com.thepearlking.stevespace.vessel.VesselEntity.shipOf(pilot[0], 2);
+                boolean joined = own != null && own.structure().blocks().values().stream()
+                        .anyMatch(b -> b.is(com.thepearlking.stevespace.registry.ModBlocks.RADIO_RACK.get()));
+                check("autopilot-docks-with-station-" + what, joined, String.format("after %d s%s", ticks[0] / 20,
+                        own == null ? ", no ship" : ", " + own.structure().size() + " blocks"));
+                pilot[0].stopRiding();
+                com.thepearlking.stevespace.universe.ServerUniverse.setWarp(server, 1);
+            });
+        }
+
+        /** Who's on the dock list, and power crossing a pair of docked ports only when both share. */
+        private static void listAndPower(MinecraftServer server) {
+            final net.minecraft.server.level.ServerPlayer[] pilot = new net.minecraft.server.level.ServerPlayer[1];
+            final java.util.UUID[] ids = new java.util.UUID[3];
+            later(server, 2, () -> {
+                ServerLevel space = server.getLevel(com.thepearlking.stevespace.world.SpaceDimension.KEY);
+                var earth = com.thepearlking.stevespace.universe.ServerUniverse.system().earth();
+                double r = earth.radius() + 3500;
+                var mine = com.thepearlking.stevespace.vessel.VesselEntity.spawnInOrbit(space, chaser(true), earth, circular(r, 4.0),
+                        new org.joml.Quaterniond());
+                java.util.UUID stranger = java.util.UUID.randomUUID();
+                // Someone else's, no radio: not listed. Someone else's with a radio: listed. Mine: listed.
+                var silent = com.thepearlking.stevespace.vessel.VesselEntity.spawnInOrbit(space, chaser(false), earth, circular(r, 4.01),
+                        new org.joml.Quaterniond());
+                com.thepearlking.stevespace.vessel.VesselEntityAccess.setOwner(silent, stranger);
+                var talking = com.thepearlking.stevespace.vessel.VesselEntity.spawnInOrbit(space, station(), earth, circular(r, 4.02),
+                        new org.joml.Quaterniond());
+                com.thepearlking.stevespace.vessel.VesselEntityAccess.setOwner(talking, stranger);
+                pilot[0] = VesselTests.mockPlayer(server.overworld(), "Ls" + Integer.toHexString(new java.util.Random().nextInt(0xFFFFFF)));
+                var own = com.thepearlking.stevespace.vessel.VesselEntity.spawnInOrbit(space, chaser(true), earth, circular(r, 3.99),
+                        new org.joml.Quaterniond());
+                com.thepearlking.stevespace.vessel.VesselEntityAccess.setOwner(mine, pilot[0].getUUID());
+                pilot[0].teleportTo(space, own.getX(), own.getY() + 3, own.getZ(), java.util.Set.of(), 0, 0);
+                pilot[0].startRiding(own, true);
+                ids[0] = mine.getUUID();
+                ids[1] = silent.getUUID();
+                ids[2] = talking.getUUID();
+            });
+            later(server, 20, () -> {
+                var list = com.thepearlking.stevespace.vessel.DockList.build(pilot[0]);
+                java.util.Set<java.util.UUID> listed = new java.util.HashSet<>();
+                list.ships().forEach(e -> listed.add(e.id()));
+                check("dock-list-who", listed.contains(ids[0]) && !listed.contains(ids[1]) && listed.contains(ids[2]),
+                        "mine " + listed.contains(ids[0]) + ", stranger's silent " + listed.contains(ids[1]) + ", stranger's with radio "
+                                + listed.contains(ids[2]));
+                pilot[0].stopRiding();
+            });
+            // Power: creative source, port facing east, port facing west, battery. Only both sharing lets it through.
+            ServerLevel level = server.overworld();
+            BlockPos spawn = level.getSharedSpawnPos();
+            final BlockPos[] at = new BlockPos[1];
+            later(server, 2, () -> {
+                int x = spawn.getX() + 170;
+                int z = spawn.getZ() - 30;
+                for (int cx = (x >> 4) - 1; cx <= (x >> 4) + 1; cx++) {
+                    for (int cz = (z >> 4) - 1; cz <= (z >> 4) + 1; cz++) {
+                        level.setChunkForced(cx, cz, true);
+                    }
+                }
+                at[0] = VesselTests.clearArea(level, x, z).above(4);
+                level.setBlockAndUpdate(at[0], com.thepearlking.stevespace.registry.ModBlocks.CREATIVE_POWER.get().defaultBlockState());
+                level.setBlockAndUpdate(at[0].east(), port(net.minecraft.core.Direction.EAST));
+                level.setBlockAndUpdate(at[0].east(2), port(net.minecraft.core.Direction.WEST));
+                level.setBlockAndUpdate(at[0].east(3), com.thepearlking.stevespace.registry.ModBlocks.SMALL_BATTERY.get().defaultBlockState());
+            });
+            java.util.function.IntSupplier stored = () -> level.getBlockEntity(at[0].east(3))
+                    instanceof com.thepearlking.stevespace.energy.PowerBlockEntity p ? p.buffer().getEnergyStored() : -1;
+            later(server, 60, () -> {
+                check("docked-ports-keep-power-apart", stored.getAsInt() == 0, "battery " + stored.getAsInt());
+                var a = level.getBlockState(at[0].east());
+                level.setBlockAndUpdate(at[0].east(), a.setValue(com.thepearlking.stevespace.block.DockingPortBlock.SHARING, true));
+            });
+            later(server, 60, () -> {
+                check("one-port-sharing-not-enough", stored.getAsInt() == 0, "battery " + stored.getAsInt());
+                var b = level.getBlockState(at[0].east(2));
+                level.setBlockAndUpdate(at[0].east(2), b.setValue(com.thepearlking.stevespace.block.DockingPortBlock.SHARING, true));
+            });
+            later(server, 60, () -> check("both-ports-sharing-pass-power", stored.getAsInt() > 0, "battery " + stored.getAsInt()));
         }
     }
 

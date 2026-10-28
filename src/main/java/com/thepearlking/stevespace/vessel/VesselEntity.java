@@ -97,6 +97,9 @@ public class VesselEntity extends Entity implements IEntityAdditionalSpawnData {
     /** Where the ship's blocks stand while materialized (their structure's origin). */
     private static final EntityDataAccessor<BlockPos> BLOCK_ORIGIN =
             SynchedEntityData.defineId(VesselEntity.class, EntityDataSerializers.BLOCK_POS);
+    /** How hard the RCS thrusters are pushing, in the vessel's own axes (each -1..1), for the puffs. */
+    private static final EntityDataAccessor<Vector3f> RCS =
+            SynchedEntityData.defineId(VesselEntity.class, EntityDataSerializers.VECTOR3);
 
     /** Keeps the chunks a flying vessel is in, and is heading into, loaded and ticking. */
     private static final net.minecraft.server.level.TicketType<net.minecraft.world.level.ChunkPos> FLIGHT_TICKET =
@@ -151,8 +154,20 @@ public class VesselEntity extends Entity implements IEntityAdditionalSpawnData {
     private final Autopilot autopilot = new Autopilot();
     /** Where the autopilot wants the engines to push (world axes), or null to fly by hand. */
     private DVec3 steerTarget;
+    /**
+     * Visiting a ship that is blocks in its cell: that ship's blocks stand upright whichever way
+     * it really points, so the visitor is shown turned into the host's own frame (this turns the
+     * cell's axes into it). Null otherwise.
+     */
+    private Quaterniond displayFrame;
+    /** A whole attitude the autopilot wants held (vessel to world axes), or null. */
+    private Quaterniond steerAttitude;
+    /** The push the autopilot wants from the RCS thrusters (world axes, blocks/s²), or null. */
+    private DVec3 rcsWanted;
     private int restingTicks;
     private boolean allowDismount;
+    /** Who launched it (they may dock anything of theirs to it), or null: anyone's. */
+    private java.util.UUID owner;
     /** Ticks left before this vessel may dock again (just undocked: let the two drift apart). */
     int dockCooldown;
     /** Vertical speed paused while waiting in the air for the ground below to load (0: none). */
@@ -199,6 +214,7 @@ public class VesselEntity extends Entity implements IEntityAdditionalSpawnData {
             vessel.setCustomName(net.minecraft.network.chat.Component.translatable("entity.stevespace.vessel.named", pilot.getName()));
         }
         vessel.propellant = totalPropellant(structure);
+        vessel.owner = pilot == null ? null : pilot.getUUID();
         Vector3d com = vessel.stats.centerOfMass();
         vessel.setPos(origin.getX() + com.x, origin.getY() + com.y, origin.getZ() + com.z);
         vessel.setGrounded(true);
@@ -257,6 +273,61 @@ public class VesselEntity extends Entity implements IEntityAdditionalSpawnData {
         return stats;
     }
 
+    public java.util.UUID owner() {
+        return owner;
+    }
+
+    /** Which way the ship points (vessel axes to its world axes). */
+    public Quaterniond orientationCopy() {
+        return new Quaterniond(orientation);
+    }
+
+    void setOwner(java.util.UUID owner) {
+        this.owner = owner;
+    }
+
+    /** See {@link #displayFrame}. */
+    void setDisplayFrame(Quaterniond frame) {
+        displayFrame = frame;
+    }
+
+    /** The cell's axes as rows (for {@link #cellTurn}). */
+    private double[] axisRows() {
+        return new double[]{orbital.axisX().x(), orbital.axisX().y(), orbital.axisX().z(),
+                orbital.axisY().x(), orbital.axisY().y(), orbital.axisY().z(),
+                orbital.axisZ().x(), orbital.axisZ().y(), orbital.axisZ().z()};
+    }
+
+    /** Which way the ship points in fixed space (vessel axes to the inertial frame); orbit only. */
+    public Quaterniond inertialOrientation() {
+        return cellTurn(axisRows()).conjugate().mul(orientation).normalize();
+    }
+
+    /** An attitude in fixed space turned into this ship's world axes; orbit only. */
+    public Quaterniond worldOrientation(Quaterniond inertial) {
+        return cellTurn(axisRows()).mul(inertial).normalize();
+    }
+
+    /** Centre of a docking port's outer face, relative to the body (inertial); orbit only. */
+    public DVec3 portFaceInertial(VesselStats.Port port) {
+        Vector3d local = new Vector3d(port.pos().getX() + 0.5 + port.facing().getStepX() * 0.5,
+                port.pos().getY() + 0.5 + port.facing().getStepY() * 0.5,
+                port.pos().getZ() + 0.5 + port.facing().getStepZ() * 0.5).sub(stats.centerOfMass());
+        orientation.transform(local);
+        return orbital.state().position().add(orbital.toInertial(local.x, local.y, local.z));
+    }
+
+    /** The way a docking port points (inertial); orbit only. */
+    public DVec3 portDirectionInertial(VesselStats.Port port) {
+        Vector3d d = orientation.transform(new Vector3d(port.facing().getStepX(), port.facing().getStepY(), port.facing().getStepZ()));
+        return orbital.toInertial(d.x, d.y, d.z);
+    }
+
+    /** Whether this is {@code player}'s ship (one with no owner is everyone's). */
+    public boolean ownedBy(Player player) {
+        return owner == null || player != null && owner.equals(player.getUUID());
+    }
+
     // ---------------------------------------------------------------------------------------
     // Synced data and saving
     // ---------------------------------------------------------------------------------------
@@ -277,10 +348,12 @@ public class VesselEntity extends Entity implements IEntityAdditionalSpawnData {
         builder.define(STAMP, 0);
         builder.define(MATERIALIZED, false);
         builder.define(BLOCK_ORIGIN, BlockPos.ZERO);
+        builder.define(RCS, new Vector3f());
     }
 
     private void syncState() {
-        entityData.set(ORIENTATION, new Quaternionf((float) orientation.x, (float) orientation.y, (float) orientation.z, (float) orientation.w));
+        Quaterniond shown = displayFrame != null ? new Quaterniond(displayFrame).mul(orientation) : orientation;
+        entityData.set(ORIENTATION, new Quaternionf((float) shown.x, (float) shown.y, (float) shown.z, (float) shown.w));
         entityData.set(SPIN, new Vector3f((float) angularVelocity.x, (float) angularVelocity.y, (float) angularVelocity.z));
         entityData.set(STAMP, tickCount);
         if (orbital != null) {
@@ -314,6 +387,7 @@ public class VesselEntity extends Entity implements IEntityAdditionalSpawnData {
         if (tag.contains("autopilot")) {
             autopilot.load(tag.getCompound("autopilot"));
         }
+        owner = tag.hasUUID("owner") ? tag.getUUID("owner") : null;
         if (tag.contains("lever")) {
             pilotControls = new VesselControls(tag.getDouble("lever"), 0, 0, 0);
         }
@@ -361,6 +435,9 @@ public class VesselEntity extends Entity implements IEntityAdditionalSpawnData {
         }
         tag.put("crew", crew.save());
         tag.putDouble("lever", pilotControls.throttle()); // the throttle as the pilot left it
+        if (owner != null) {
+            tag.putUUID("owner", owner);
+        }
         if (materialized()) {
             tag.putBoolean("materialized", true);
             tag.putInt("ox", blockOrigin().getX());
@@ -699,6 +776,11 @@ public class VesselEntity extends Entity implements IEntityAdditionalSpawnData {
         }
     }
 
+    /** Docks with another ship: see {@link Autopilot#startDock}. */
+    public void startDock(java.util.UUID id, int cell, BlockPos mine, BlockPos theirs) {
+        autopilot.startDock(this, id, cell, mine, theirs);
+    }
+
     public String autopilotDebug() {
         return autopilot.debug(this);
     }
@@ -873,7 +955,7 @@ public class VesselEntity extends Entity implements IEntityAdditionalSpawnData {
         // only the pilot taking over (a second touch of the controls) or Cancel in its menu.
         // A player's ship left in orbit with nobody aboard parks itself, so it can be walked into.
         boolean nobodyAboard = materialized() ? aboard == null && !autopilot.active() : getPassengers().isEmpty();
-        if (nobodyAboard && orbital != null && orbital.anchor() == null && hasCustomName()) {
+        if (nobodyAboard && orbital != null && orbital.anchor() == null && hasCustomName() && !Rendezvous.busy(this)) {
             if (++uncrewedTicks > 100) {
                 park(null);
                 return;
@@ -882,6 +964,8 @@ public class VesselEntity extends Entity implements IEntityAdditionalSpawnData {
             uncrewedTicks = 0;
         }
         steerTarget = null;
+        steerAttitude = null;
+        rcsWanted = null;
         // With nobody aboard (or the crew still catching up after a dimension change) it just waits.
         if (autopilot.active() && aboard != null) {
             controls = VesselControls.IDLE; // the autopilot has the controls; the pilot's are ignored
@@ -893,6 +977,8 @@ public class VesselEntity extends Entity implements IEntityAdditionalSpawnData {
                 }
                 if (command != null) {
                     steerTarget = command.direction();
+                    steerAttitude = command.attitude();
+                    rcsWanted = command.translate();
                     double aligned = alignment(command.direction());
                     // Only fire once roughly pointing the right way.
                     double throttle = aligned > 0.97 ? command.throttle() : aligned > 0.9 ? command.throttle() * (aligned - 0.9) / 0.07 : 0;
@@ -1121,6 +1207,8 @@ public class VesselEntity extends Entity implements IEntityAdditionalSpawnData {
         double mass = stats.dryMass() + propellant;
         Vector3d thrust = orientation.transform(stats.thrustVector()).mul(throttle * SpaceConfig.THRUST_SCALE.get());
         Vector3d acceleration = new Vector3d(thrust).div(mass);
+        Vector3d rcs = (propellant > 0 || infiniteFuel) && !isGrounded() ? rcsPush() : new Vector3d();
+        acceleration.add(rcsAcceleration(rcs, infiniteFuel));
 
         double altitude = mapY() - 63;
         double gravityY;
@@ -1280,7 +1368,7 @@ public class VesselEntity extends Entity implements IEntityAdditionalSpawnData {
         double gravityScale = SpaceConfig.GRAVITY_SCALE.get();
         boolean infiniteFuel = pilot != null && pilot.getAbilities().instabuild && SpaceConfig.CREATIVE_INFINITE_FUEL.get();
         // Burning only happens at normal time speed; time warp is coasting only.
-        if (clock.warp() > 1 && controls.throttle() > 0) {
+        if (clock.warp() > 1 && (controls.throttle() > 0 || controls.translating())) {
             com.thepearlking.stevespace.universe.TimeWarp.stop(server); // firing the engines ends warp
         }
         boolean warping = clock.warp() > 1;
@@ -1304,6 +1392,13 @@ public class VesselEntity extends Entity implements IEntityAdditionalSpawnData {
             }
         }
         entityData.set(THROTTLE, (float) throttle);
+        Vector3d rcs = !warping && (propellant > 0 || infiniteFuel) ? rcsPush() : new Vector3d();
+        Vector3d nudge = rcsAcceleration(rcs, infiniteFuel);
+        if (nudge.lengthSquared() > 0) {
+            felt.add(nudge);
+            DVec3 push = orbital.toInertial(nudge.x, nudge.y, nudge.z);
+            thrust = thrust == null ? push : thrust.add(push);
+        }
         turn(pilot);
         org.joml.Matrix3d turn = orbital.advance(ServerUniverse.system(), clock.time(), thrust, gravityScale,
                 orbital.body().radius() + VesselTransfer.entryAltitude(orbital.body()));
@@ -1329,9 +1424,18 @@ public class VesselEntity extends Entity implements IEntityAdditionalSpawnData {
             var state = orbital.state();
             double[] values = {state.position().x(), state.position().y(), state.position().z(),
                     state.velocity().x(), state.velocity().y(), state.velocity().z()};
-            double[] axes = {orbital.axisX().x(), orbital.axisX().y(), orbital.axisX().z(),
-                    orbital.axisY().x(), orbital.axisY().y(), orbital.axisY().z(),
-                    orbital.axisZ().x(), orbital.axisZ().y(), orbital.axisZ().z()};
+            double[] axes = axisRows();
+            if (displayFrame != null) {
+                // Shown in the host's frame: so is everything round the crew, the sky included.
+                Quaterniond back = new Quaterniond(displayFrame).conjugate();
+                for (int i = 0; i < 3; i++) {
+                    Vector3d unit = back.transform(new Vector3d(i == 0 ? 1 : 0, i == 1 ? 1 : 0, i == 2 ? 1 : 0));
+                    DVec3 inertial = orbital.toInertial(unit.x, unit.y, unit.z);
+                    axes[i * 3] = inertial.x();
+                    axes[i * 3 + 1] = inertial.y();
+                    axes[i * 3 + 2] = inertial.z();
+                }
+            }
             message = new com.thepearlking.stevespace.network.VesselOrbitS2C(getId(), orbital.body().id(), orbital.time(),
                     values, axes, controls.throttle() <= 0, false);
         } else if (mapPosition != null) {
@@ -1370,11 +1474,86 @@ public class VesselEntity extends Entity implements IEntityAdditionalSpawnData {
         return t.x * direction.x() + t.y * direction.y() + t.z * direction.z();
     }
 
+    /**
+     * The RCS push this tick, in the vessel's own axes (each -1..1): what the autopilot wants, or
+     * the pilot's RCS keys (forward is where the pilot's seat faces).
+     */
+    private Vector3d rcsPush() {
+        if (stats.rcs().isEmpty() && rcsWanted == null) {
+            return new Vector3d(); // without RCS thrusters only the docking autopilot can puff (weakly)
+        }
+        Vector3d local;
+        if (testRcsPush != null) {
+            local = new Vector3d(testRcsPush);
+        } else if (rcsWanted != null) {
+            local = new Quaterniond(orientation).conjugate().transform(new Vector3d(rcsWanted.x(), rcsWanted.y(), rcsWanted.z()))
+                    .div(dockAcceleration());
+        } else if (controls.translating()) {
+            Direction facing = stats.seats().isEmpty() ? Direction.NORTH : stats.seats().get(0).facing();
+            Vector3d forward = new Vector3d(facing.getStepX(), 0, facing.getStepZ());
+            Vector3d up = new Vector3d(0, 1, 0);
+            Vector3d right = new Vector3d(forward).cross(up);
+            local = forward.mul(controls.forward()).add(right.mul(controls.right())).add(up.mul(controls.up()));
+        } else {
+            return new Vector3d();
+        }
+        if (local.length() > 1) {
+            local.normalize();
+        }
+        return local;
+    }
+
+    /** The acceleration (world axes, blocks/s²) from an RCS push, using up propellant for it. */
+    private Vector3d rcsAcceleration(Vector3d push, boolean infiniteFuel) {
+        entityData.set(RCS, new Vector3f((float) push.x, (float) push.y, (float) push.z));
+        if (push.lengthSquared() < 1e-8) {
+            return new Vector3d();
+        }
+        double force = dockAcceleration() * (stats.dryMass() + propellant);
+        if (!infiniteFuel) {
+            propellant = Math.max(0, propellant - push.length() * force / (VesselParts.RCS_EXHAUST * SpaceConfig.FUEL_EFFICIENCY.get()) * TICK);
+        }
+        return orientation.transform(new Vector3d(push)).mul(force / (stats.dryMass() + propellant));
+    }
+
+    /** Client tests: every RCS-fitted ship pushes this way (vessel axes), or null. */
+    public static Vector3d testRcsPush;
+
+    /** How hard the RCS thrusters push (vessel axes, each -1..1), for the puffs on screen. */
+    public Vector3f rcsPushSynced() {
+        return entityData.get(RCS);
+    }
+
+    /** Greatest acceleration the RCS thrusters can give (blocks/s²), 0 without any. */
+    public double rcsAcceleration() {
+        return stats.rcsThrust() * SpaceConfig.THRUST_SCALE.get() / (stats.dryMass() + propellant);
+    }
+
+    /** Puffing propellant out through the hull's vents: all a ship without RCS thrusters has for docking. */
+    private static final double VENT_ACCELERATION = 0.06;
+
+    /** The push the docking autopilot has for small moves (blocks/s²): RCS thrusters, or weak vents without. */
+    public double dockAcceleration() {
+        double rcs = rcsAcceleration();
+        return rcs > 0 ? rcs : VENT_ACCELERATION;
+    }
+
     /** Rotates toward the pilot's input at the configured rate; holds attitude without input. */
     private void turn(Player pilot) {
         double rate = Math.toRadians(SpaceConfig.TURN_RATE.get());
         Vector3d target = new Vector3d();
-        if (steerTarget != null && !isGrounded()) {
+        if (steerAttitude != null && !isGrounded()) {
+            // Autopilot holding a whole attitude (lining a docking port up, square to the other's).
+            Quaterniond error = new Quaterniond(orientation).conjugate().mul(steerAttitude).normalize();
+            if (error.w < 0) {
+                error.set(-error.x, -error.y, -error.z, -error.w); // the short way round
+            }
+            double angle = 2 * Math.acos(Math.min(1, error.w));
+            double s = Math.sqrt(Math.max(0, 1 - error.w * error.w));
+            if (s > 1e-6) {
+                target.set(error.x / s, error.y / s, error.z / s).mul(Math.min(rate, angle * 2.5));
+            }
+        } else if (steerTarget != null && !isGrounded()) {
             // Autopilot: turn the thrust direction toward the target, slowing as it lines up.
             Vector3d current = thrustDirection();
             Vector3d wanted = new Vector3d(steerTarget.x(), steerTarget.y(), steerTarget.z());
@@ -1445,6 +1624,10 @@ public class VesselEntity extends Entity implements IEntityAdditionalSpawnData {
         double mu = body.mu() * SpaceConfig.GRAVITY_SCALE.get();
         var state = com.thepearlking.stevespace.universe.Kepler.elementsFromState(parked.state(), mu, parked.time()).stateAt(now, mu);
         VesselEntity vessel = new VesselEntity(ModEntities.VESSEL.get(), space);
+        if (parked.id() != null && space.getEntity(parked.id()) == null) {
+            vessel.setUUID(parked.id()); // the same ship as before it parked (docking targets follow it)
+        }
+        vessel.owner = parked.owner();
         vessel.setStructure(structure);
         vessel.setCustomName(shipName(parked.name(), space));
         vessel.propellant = totalPropellant(structure);
@@ -1561,7 +1744,7 @@ public class VesselEntity extends Entity implements IEntityAdditionalSpawnData {
                 orbital.cell(), orbital.body().id(), orbital.state(), orbital.time(),
                 net.minecraft.network.chat.Component.Serializer.toJson(getName(), level.registryAccess()),
                 new BlockPos(minX, minY, minZ), new BlockPos(maxX, maxY, maxZ),
-                new com.thepearlking.stevespace.universe.DVec3(getX(), getY(), getZ())));
+                new com.thepearlking.stevespace.universe.DVec3(getX(), getY(), getZ()), getUUID(), owner));
         List<Entity> riders = new ArrayList<>(getPassengers());
         allowDismount = true;
         ejectPassengers();
@@ -1630,20 +1813,6 @@ public class VesselEntity extends Entity implements IEntityAdditionalSpawnData {
     // Docking
     // ---------------------------------------------------------------------------------------
 
-    /** Centre of a docking port's outer face, in the world. */
-    Vector3d portFace(VesselStats.Port port) {
-        Vector3d local = new Vector3d(port.pos().getX() + 0.5 + port.facing().getStepX() * 0.5,
-                port.pos().getY() + 0.5 + port.facing().getStepY() * 0.5,
-                port.pos().getZ() + 0.5 + port.facing().getStepZ() * 0.5).sub(stats.centerOfMass());
-        orientation.transform(local);
-        return local.add(getX(), getY(), getZ());
-    }
-
-    /** The way a docking port points, in the world. */
-    Vector3d portDirection(VesselStats.Port port) {
-        return orientation.transform(new Vector3d(port.facing().getStepX(), port.facing().getStepY(), port.facing().getStepZ()));
-    }
-
     /**
      * Docks {@code other} onto this vessel: its blocks join this structure, its propellant and crew
      * come aboard, and the two orbits become one (by momentum). Returns false, changing nothing, if
@@ -1695,6 +1864,9 @@ public class VesselEntity extends Entity implements IEntityAdditionalSpawnData {
                 a.velocity().scale(myMass / total).add(b.velocity().scale(theirMass / total))));
         Vector3d oldCom = stats.centerOfMass();
         propellant += other.propellant;
+        if (owner == null) {
+            owner = other.owner;
+        }
         setStructure(new VesselStructure(blocks, entities));
         Vector3d shift = orientation.transform(stats.centerOfMass().sub(oldCom));
         setPos(getX() + shift.x, getY() + shift.y, getZ() + shift.z);
@@ -1765,6 +1937,7 @@ public class VesselEntity extends Entity implements IEntityAdditionalSpawnData {
             VesselEntity part = new VesselEntity(ModEntities.VESSEL.get(), level());
             part.setStructure(partStructure);
             part.propellant = partPropellant;
+            part.owner = owner;
             part.orientation.set(orientation);
             Vector3d partShift = orientation.transform(partStats.centerOfMass().sub(oldCom));
             part.setPos(getX() + partShift.x, getY() + partShift.y, getZ() + partShift.z);
@@ -2378,7 +2551,8 @@ public class VesselEntity extends Entity implements IEntityAdditionalSpawnData {
         com.thepearlking.stevespace.world.ParkedShips.get(level.getServer()).put(new com.thepearlking.stevespace.world.ParkedShips.Parked(
                 orbital.cell(), orbital.body().id(), orbital.state(), orbital.time(),
                 net.minecraft.network.chat.Component.Serializer.toJson(getName(), level.registryAccess()),
-                o.offset(boundsMin), o.offset(boundsMax), new com.thepearlking.stevespace.universe.DVec3(getX(), getY(), getZ())));
+                o.offset(boundsMin), o.offset(boundsMax), new com.thepearlking.stevespace.universe.DVec3(getX(), getY(), getZ()),
+                getUUID(), owner));
         parking = true;
         discard();
         com.thepearlking.stevespace.StevesSpace.LOGGER.info("{} parked in orbit of {} (cell {})", getName().getString(), orbital.body().id(), orbital.cell());

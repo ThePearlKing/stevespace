@@ -21,6 +21,8 @@ public final class FlightInput {
     private static final float THROTTLE_STEP = 0.025f;
 
     private static float throttle;
+    /** RCS mode: the movement keys push the ship about (W/S/A/D, Shift/Ctrl) instead of steering. */
+    private static boolean rcsMode;
     private static net.minecraft.world.entity.Entity lastVehicle;
     private static boolean wasPiloting;
 
@@ -42,6 +44,10 @@ public final class FlightInput {
 
     public static float throttle() {
         return throttle;
+    }
+
+    public static boolean rcsMode() {
+        return rcsMode;
     }
 
     public static void setThrottle(float value) {
@@ -130,10 +136,18 @@ public final class FlightInput {
         }
         rememberHeld(mc);
         if (flightKeys(mc)) {
-            if (held(mc, FlightKeys.THROTTLE_UP)) {
+            while (FlightKeys.RCS_MODE.consumeClick()) {
+                rcsMode = !rcsMode;
+                boolean fitted = VesselEntity.shipOf(player) instanceof VesselEntity v ? !v.stats().rcs().isEmpty()
+                        : player.getVehicle() instanceof SeatEntity;
+                mc.gui.setOverlayMessage(net.minecraft.network.chat.Component.translatable(!rcsMode ? "hud.stevespace.rcs.off"
+                        : fitted ? "hud.stevespace.rcs.on" : "hud.stevespace.rcs.none"), false);
+            }
+            // In RCS mode Shift and Ctrl push the ship up and down instead of moving the throttle.
+            if (!rcsMode && held(mc, FlightKeys.THROTTLE_UP)) {
                 throttle = Math.min(1, throttle + THROTTLE_STEP);
             }
-            if (held(mc, FlightKeys.THROTTLE_DOWN)) {
+            if (!rcsMode && held(mc, FlightKeys.THROTTLE_DOWN)) {
                 throttle = Math.max(0, throttle - THROTTLE_STEP);
             }
             while (FlightKeys.THROTTLE_FULL.consumeClick()) {
@@ -147,9 +161,18 @@ public final class FlightInput {
             }
         }
         boolean keys = flightKeys(mc);
-        float pitch = keys ? axis(held(mc, mc.options.keyUp), held(mc, mc.options.keyDown)) : 0;
-        float roll = keys ? axis(held(mc, mc.options.keyRight), held(mc, mc.options.keyLeft)) : 0;
         float yaw = keys ? axis(held(mc, FlightKeys.YAW_RIGHT), held(mc, FlightKeys.YAW_LEFT)) : 0;
+        float arrows = keys ? axis(held(mc, FlightKeys.PITCH_UP), held(mc, FlightKeys.PITCH_DOWN)) : 0;
+        if (rcsMode) {
+            // The arrow keys still turn the ship; the movement keys push it.
+            float forward = keys ? axis(held(mc, mc.options.keyUp), held(mc, mc.options.keyDown)) : 0;
+            float right = keys ? axis(held(mc, mc.options.keyRight), held(mc, mc.options.keyLeft)) : 0;
+            float up = keys ? axis(held(mc, FlightKeys.THROTTLE_UP), held(mc, FlightKeys.THROTTLE_DOWN)) : 0;
+            SpaceNetwork.sendToServer(new VesselControlC2S(throttle, arrows, 0, yaw, forward, right, up));
+            return;
+        }
+        float pitch = keys ? Math.max(-1, Math.min(1, axis(held(mc, mc.options.keyUp), held(mc, mc.options.keyDown)) + arrows)) : 0;
+        float roll = keys ? axis(held(mc, mc.options.keyRight), held(mc, mc.options.keyLeft)) : 0;
         SpaceNetwork.sendToServer(new VesselControlC2S(throttle, pitch, roll, yaw));
     }
 
@@ -193,7 +216,8 @@ public final class FlightInput {
 
     private static net.minecraft.client.KeyMapping[] controls(Minecraft mc) {
         return new net.minecraft.client.KeyMapping[]{FlightKeys.THROTTLE_UP, FlightKeys.THROTTLE_DOWN, FlightKeys.THROTTLE_FULL,
-                FlightKeys.THROTTLE_CUT, FlightKeys.YAW_LEFT, FlightKeys.YAW_RIGHT, mc.options.keyUp, mc.options.keyDown,
+                FlightKeys.THROTTLE_CUT, FlightKeys.YAW_LEFT, FlightKeys.YAW_RIGHT, FlightKeys.PITCH_UP, FlightKeys.PITCH_DOWN,
+                mc.options.keyUp, mc.options.keyDown,
                 mc.options.keyLeft, mc.options.keyRight};
     }
 

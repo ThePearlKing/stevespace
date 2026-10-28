@@ -11,4 +11,8 @@ public final class VesselEntityAccess {
     public static void setState(VesselEntity vessel, StateVector state) {
         vessel.orbital().setState(state);
     }
+
+    public static void setOwner(VesselEntity vessel, java.util.UUID owner) {
+        vessel.setOwner(owner);
+    }
 }

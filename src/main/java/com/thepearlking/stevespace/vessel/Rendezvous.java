@@ -41,6 +41,9 @@ public final class Rendezvous {
                 orbiting.add(v);
             }
         }
+        if (server.getTickCount() % 10 == 0) {
+            wakeParked(space, orbiting);
+        }
         // Visitors follow the vessel whose cell they share, or leave when it's gone or far.
         for (VesselEntity v : orbiting) {
             OrbitalFlight o = v.orbital();
@@ -64,8 +67,7 @@ public final class Rendezvous {
                 if (other == v || other.orbital().anchor() != null || !other.orbital().body().id().equals(v.orbital().body().id())) {
                     continue;
                 }
-                // The older vessel (lower id) keeps its cell.
-                if (other.getId() < v.getId() && separation(v, other) < JOIN) {
+                if (hosts(other, v) && separation(v, other) < JOIN) {
                     join(space, v, other);
                     break;
                 }
@@ -81,6 +83,114 @@ public final class Rendezvous {
                 tryDock(host, v);
             }
         }
+    }
+
+    /**
+     * Which of two meeting vessels keeps its cell (the other comes to it): one nobody is flying
+     * (a station) over one being flown, then the bigger, then the older.
+     */
+    private static boolean hosts(VesselEntity a, VesselEntity b) {
+        boolean flownA = a.pilot() != null;
+        boolean flownB = b.pilot() != null;
+        if (flownA != flownB) {
+            return !flownA;
+        }
+        if (a.structure().size() != b.structure().size()) {
+            return a.structure().size() > b.structure().size();
+        }
+        return a.getId() < b.getId();
+    }
+
+    /**
+     * Whether a vessel has company: guests in its cell, or another vessel close by. A ship with
+     * company doesn't park itself (a station stays awake while someone docks with it).
+     */
+    static boolean busy(VesselEntity host) {
+        for (VesselEntity v : VesselEntity.serverVessels()) {
+            if (v == host || v.isRemoved() || v.orbital() == null || host.orbital() == null) {
+                continue;
+            }
+            if (host.getUUID().equals(v.orbital().anchor())
+                    || v.orbital().body().id().equals(host.orbital().body().id()) && separation(v, host) < LEAVE) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /** Where a parked ship is in its orbit at time {@code t} (relative to its body). */
+    static DVec3 parkedPosition(com.thepearlking.stevespace.world.ParkedShips.Parked p, double t) {
+        var body = com.thepearlking.stevespace.universe.ServerUniverse.system().body(p.body());
+        double mu = body.mu() * com.thepearlking.stevespace.config.SpaceConfig.GRAVITY_SCALE.get();
+        return com.thepearlking.stevespace.universe.Kepler.elementsFromState(p.state(), mu, p.time()).stateAt(t, mu).position();
+    }
+
+    /**
+     * A parked ship (a station) that a flying vessel comes close to turns back into a vessel,
+     * with nobody aboard, so the two can share a cell, see each other and dock. It parks itself
+     * again once it's alone.
+     */
+    private static void wakeParked(ServerLevel space, List<VesselEntity> orbiting) {
+        var parkedShips = com.thepearlking.stevespace.world.ParkedShips.get(space.getServer());
+        if (parkedShips.all().isEmpty()) {
+            return;
+        }
+        for (var p : List.copyOf(parkedShips.all())) {
+            for (VesselEntity v : orbiting) {
+                if (v.isRemoved() || !p.body().equals(v.orbital().body().id())) {
+                    continue;
+                }
+                double apart = parkedPosition(p, v.orbital().time()).sub(v.orbital().state().position()).length();
+                if (apart < JOIN + 60) {
+                    wake(space, p);
+                    break;
+                }
+            }
+        }
+    }
+
+    /**
+     * The block a parked ship's blocks are counted from when it flies again: its pilot seat if it
+     * has one, else its first block. (Its chunks must be loaded.)
+     */
+    static net.minecraft.core.BlockPos parkedOrigin(ServerLevel space, com.thepearlking.stevespace.world.ParkedShips.Parked p) {
+        net.minecraft.core.BlockPos origin = null;
+        for (net.minecraft.core.BlockPos pos : net.minecraft.core.BlockPos.betweenClosed(p.min(), p.max())) {
+            var state = space.getBlockState(pos);
+            if (state.getBlock() instanceof com.thepearlking.stevespace.block.PilotSeatBlock) {
+                return pos.immutable();
+            }
+            if (origin == null && !state.isAir()) {
+                origin = pos.immutable();
+            }
+        }
+        return origin;
+    }
+
+    /** Turns a parked ship back into a vessel (once its blocks' chunks are loaded). */
+    static VesselEntity wake(ServerLevel space, com.thepearlking.stevespace.world.ParkedShips.Parked p) {
+        boolean ready = true;
+        for (int cx = p.min().getX() >> 4; cx <= p.max().getX() >> 4; cx++) {
+            for (int cz = p.min().getZ() >> 4; cz <= p.max().getZ() >> 4; cz++) {
+                VesselEntity.loadPathAhead(space, null, cx * 16 + 8, cz * 16 + 8, 0, 0);
+                ready &= VesselEntity.isReady(space, cx, cz);
+            }
+        }
+        if (!ready) {
+            return null;
+        }
+        net.minecraft.core.BlockPos origin = parkedOrigin(space, p);
+        if (origin == null) {
+            com.thepearlking.stevespace.world.ParkedShips.get(space.getServer()).remove(p.cell()); // nothing left of it
+            return null;
+        }
+        var scan = VesselAssembler.scan(space, origin, com.thepearlking.stevespace.config.SpaceConfig.MAX_VESSEL_BLOCKS.get(), false);
+        if (!scan.ok()) {
+            return null;
+        }
+        VesselEntity vessel = VesselEntity.unpark(space, origin, scan.structure(), p, null);
+        com.thepearlking.stevespace.StevesSpace.LOGGER.info("{} wakes for a visitor (cell {})", vessel.getName().getString(), p.cell());
+        return vessel;
     }
 
     private static VesselEntity find(List<VesselEntity> vessels, java.util.UUID id) {
@@ -117,11 +227,23 @@ public final class Rendezvous {
         return position.sub(h.state().position());
     }
 
-    /** Where a visitor sits in its host's cell: its real offset, in the host's axes. */
+    /**
+     * Where a visitor sits in its host's cell: its real offset, in the host's axes (or, when the
+     * host is blocks, in the frame its upright blocks stand in).
+     */
     static Vec3 spot(VesselEntity v, VesselEntity host) {
         OrbitalFlight h = host.orbital();
         DVec3 offset = offset(v, host);
-        return new Vec3(host.getX() + offset.dot(h.axisX()), host.getY() + offset.dot(h.axisY()), host.getZ() + offset.dot(h.axisZ()));
+        Vector3d rel = new Vector3d(offset.dot(h.axisX()), offset.dot(h.axisY()), offset.dot(h.axisZ()));
+        if (host.materialized()) {
+            host.orientationCopy().conjugate().transform(rel);
+        }
+        return new Vec3(host.getX() + rel.x, host.getY() + rel.y, host.getZ() + rel.z);
+    }
+
+    /** The turn from a host's cell axes into the frame its blocks stand in (null if it isn't blocks). */
+    private static org.joml.Quaterniond frameOf(VesselEntity host) {
+        return host.materialized() ? host.orientationCopy().conjugate() : null;
     }
 
     /**
@@ -136,6 +258,7 @@ public final class Rendezvous {
             return false;
         }
         v.setPos(at.x, at.y, at.z);
+        v.setDisplayFrame(frameOf(host));
         return true;
     }
 
@@ -150,6 +273,7 @@ public final class Rendezvous {
         int oldCell = v.orbital().cell();
         v.orbital().setCell(host.orbital().cell(), host.getUUID());
         v.setPos(at.x, at.y, at.z);
+        v.setDisplayFrame(frameOf(host));
         SpaceCells.get(space.getServer()).free(oldCell);
         com.thepearlking.stevespace.StevesSpace.LOGGER.info("Vessel {} joins {}'s cell ({} blocks apart)", v.getId(), host.getId(),
                 String.format(java.util.Locale.ROOT, "%.1f", separation(v, host)));
@@ -165,6 +289,7 @@ public final class Rendezvous {
         }
         int cell = cells.allocate();
         v.orbital().setCell(cell, null);
+        v.setDisplayFrame(null);
         v.teleportTo(centre.x, centre.y, centre.z);
         return true;
     }
@@ -183,17 +308,20 @@ public final class Rendezvous {
         if (relative.length() > DOCK_SPEED) {
             return;
         }
+        // Measured in fixed space: the visitor is shown in the host's frame, which needn't be its cell's.
+        DVec3 lag = visitor.orbital().state().velocity().scale(host.orbital().time() - visitor.orbital().time());
         for (VesselStats.Port a : host.stats().ports()) {
-            Vector3d faceA = host.portFace(a);
-            Vector3d dirA = host.portDirection(a);
+            DVec3 faceA = host.portFaceInertial(a);
+            DVec3 dirA = host.portDirectionInertial(a);
             for (VesselStats.Port b : visitor.stats().ports()) {
-                Vector3d faceB = visitor.portFace(b);
-                Vector3d dirB = visitor.portDirection(b);
-                if (host.tickCount % 20 == 0) {
+                DVec3 faceB = visitor.portFaceInertial(b).add(lag);
+                DVec3 dirB = visitor.portDirectionInertial(b);
+                double gap = faceA.sub(faceB).length();
+                if (host.tickCount % 20 == 0 && gap < 5) {
                     com.thepearlking.stevespace.StevesSpace.LOGGER.debug("Ports {}-{}: gap {} alignment {}", host.getId(), visitor.getId(),
-                            faceA.distance(faceB), dirA.dot(dirB));
+                            gap, dirA.dot(dirB));
                 }
-                if (faceA.distance(faceB) < DOCK_DISTANCE && dirA.dot(dirB) < -0.95) {
+                if (gap < DOCK_DISTANCE && dirA.dot(dirB) < -0.95) {
                     if (host.absorb(visitor, a, b)) {
                         return;
                     }

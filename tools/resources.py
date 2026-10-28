@@ -55,6 +55,7 @@ BLOCKS = {
     'launch_pad':        ('Launch Pad', 'cube_bottom_top', {'top': 'launch_pad', 'side': 'launch_pad_side', 'bottom': 'launch_pad_side'}),
     'fuel_loader':       ('Fuel Loader', 'horizontal', {'front': 'fuel_loader_front', 'side': 'instrument_side', 'top': 'instrument_top'}),
     'docking_port':      ('Docking Port', 'docking_port', {}),
+    'rcs_thruster':      ('RCS Thruster', 'rcs', {}),
     'telescope':         ('Telescope', 'telescope', {}),
     'flight_display':    ('Flight Display', 'horizontal', {'front': 'flight_display_front', 'side': 'instrument_side', 'top': 'instrument_top'}),
     'oxygen_generator':  ('Oxygen Generator', 'horizontal', {'front': 'oxygen_generator_front', 'side': 'instrument_side', 'top': 'instrument_top'}),
@@ -266,6 +267,15 @@ def blockstate_and_model(bid, kind, t):
             f'facing={f}': {'model': model, **r} for f, r in rotations.items()}})
     elif kind == 'docking_port':
         write(f'{ASSETS}/models/block/{bid}.json', docking_port_model())
+        # Sharing power: the same with a red collar.
+        write(f'{ASSETS}/models/block/{bid}_sharing.json', docking_port_model('docking_ring_red'))
+        rotations = {'up': {}, 'down': {'x': 180}, 'north': {'x': 90}, 'south': {'x': 90, 'y': 180},
+                     'east': {'x': 90, 'y': 90}, 'west': {'x': 90, 'y': 270}}
+        write(f'{ASSETS}/blockstates/{bid}.json', {'variants': {
+            f'facing={f},sharing={s}': {'model': model + ('_sharing' if s == 'true' else ''), **r}
+            for f, r in rotations.items() for s in ('false', 'true')}})
+    elif kind == 'rcs':
+        write(f'{ASSETS}/models/block/{bid}.json', rcs_model())
         rotations = {'up': {}, 'down': {'x': 180}, 'north': {'x': 90}, 'south': {'x': 90, 'y': 180},
                      'east': {'x': 90, 'y': 90}, 'west': {'x': 90, 'y': 270}}
         write(f'{ASSETS}/blockstates/{bid}.json', {'variants': {
@@ -311,7 +321,7 @@ def engine_model(body='engine_body', bell='engine_bell'):
             'elements': elements}
 
 
-def docking_port_model():
+def docking_port_model(collar='hull_dark'):
     """Pointing up: a hull block with a raised collar round a hatch on top."""
     def box(frm, to, faces):
         return {'from': frm, 'to': to, 'faces': faces}
@@ -320,7 +330,7 @@ def docking_port_model():
     hull['up'] = {'texture': '#hatch'}
     ring = {f: {'texture': '#ring'} for f in all6}
     return {'parent': 'minecraft:block/block',
-            'textures': {'particle': tex('hull_grey'), 'hull': tex('hull_grey'), 'ring': tex('hull_dark'),
+            'textures': {'particle': tex('hull_grey'), 'hull': tex('hull_grey'), 'ring': tex(collar),
                          'hatch': tex('docking_hatch')},
             'elements': [
                 box([0, 0, 0], [16, 12, 16], hull),
@@ -328,6 +338,35 @@ def docking_port_model():
                 box([1, 12, 13], [15, 16, 15], ring),
                 box([1, 12, 3], [3, 16, 13], ring),
                 box([13, 12, 3], [15, 16, 13], ring),
+            ]}
+
+
+def rcs_model():
+    """Pointing up: a plate on the hull, a small white housing, and five little nozzles (four
+    round the sides, one on top) so it can push any way."""
+    def uv(face, frm, to):
+        x0, y0, z0 = frm
+        x1, y1, z1 = to
+        if face in ('north', 'south'):
+            return [x0, 16 - y1, x1, 16 - y0]
+        if face in ('east', 'west'):
+            return [z0, 16 - y1, z1, 16 - y0]
+        return [x0, z0, x1, z1]
+
+    def box(frm, to, texture):
+        return {'from': frm, 'to': to, 'faces': {f: {'texture': texture, 'uv': uv(f, frm, to)}
+                                                for f in ('north', 'south', 'east', 'west', 'up', 'down')}}
+    return {'parent': 'minecraft:block/block', 'render_type': 'minecraft:cutout',
+            'textures': {'particle': tex('hull_white'), 'plate': tex('hull_dark'), 'body': tex('hull_white'),
+                         'nozzle': tex('engine_bell')},
+            'elements': [
+                box([4, 0, 4], [12, 2, 12], '#plate'),
+                box([5.5, 2, 5.5], [10.5, 8, 10.5], '#body'),
+                box([10.5, 5, 7], [13, 7, 9], '#nozzle'),
+                box([3, 5, 7], [5.5, 7, 9], '#nozzle'),
+                box([7, 5, 3], [9, 7, 5.5], '#nozzle'),
+                box([7, 5, 10.5], [9, 7, 13], '#nozzle'),
+                box([7, 8, 7], [9, 10, 9], '#nozzle'),
             ]}
 
 
@@ -502,6 +541,8 @@ RECIPES = {
     'flag': shaped('flag', 1, ['WW ', 'WWI', '  I'], {'W': 'minecraft:white_wool', 'I': 'minecraft:iron_ingot'}),
     'docking_port': shaped('docking_port', 1, [' I ', 'IHI', ' I '], {'I': 'minecraft:iron_ingot',
                                                                      'H': f'{NS}:hull_grey'}),
+    'rcs_thruster': shaped('rcs_thruster', 2, [' I ', 'ICI', ' I '], {'I': 'minecraft:iron_ingot',
+                                                                     'C': 'minecraft:copper_ingot'}),
     'telescope': shaped('telescope', 1, [' GI', ' I ', 'S S'], {'G': 'minecraft:glass_pane', 'I': 'minecraft:iron_ingot',
                                                              'S': 'minecraft:stick'}),
     'remote_receiver': shaped('remote_receiver', 1, ['ILI', 'CQC', 'IRI'], {'I': 'minecraft:iron_ingot', 'L': 'minecraft:lightning_rod',
