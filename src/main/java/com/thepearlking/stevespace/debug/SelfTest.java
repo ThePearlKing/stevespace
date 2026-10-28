@@ -2568,12 +2568,16 @@ public final class SelfTest {
                 var state = new com.thepearlking.stevespace.universe.StateVector(
                         new com.thepearlking.stevespace.universe.DVec3(r, 0, 0), new com.thepearlking.stevespace.universe.DVec3(0, v, 0));
                 pair[0] = com.thepearlking.stevespace.vessel.VesselEntity.spawnInOrbit(space, module(), earth, state, new org.joml.Quaterniond());
-                // The second, upside down, its port 0.3 blocks above the first one's.
-                var flipped = new org.joml.Quaterniond().rotateX(Math.PI);
-                var probe = com.thepearlking.stevespace.vessel.VesselEntity.spawnInOrbit(space, module(), earth, state, flipped);
+                // The second, upright with its port underneath, that port 0.3 blocks above the first one's.
+                var blocks = new java.util.HashMap<BlockPos, net.minecraft.world.level.block.state.BlockState>();
+                blocks.put(new BlockPos(0, 0, 0), com.thepearlking.stevespace.registry.ModBlocks.DOCKING_PORT.get().defaultBlockState()
+                        .setValue(com.thepearlking.stevespace.block.DockingPortBlock.FACING, net.minecraft.core.Direction.DOWN));
+                blocks.put(new BlockPos(0, 1, 0), com.thepearlking.stevespace.registry.ModBlocks.HULL_GREY.get().defaultBlockState());
+                var probe = com.thepearlking.stevespace.vessel.VesselEntity.spawnInOrbit(space,
+                        new com.thepearlking.stevespace.vessel.VesselStructure(blocks, new java.util.HashMap<>()), earth, state, new org.joml.Quaterniond());
                 var a = pair[0];
                 double faceA = 2.0 - a.stats().centerOfMass().y;          // top of the first port above its centre
-                double faceB = 2.0 - probe.stats().centerOfMass().y;      // the same on the second (pointing down)
+                double faceB = probe.stats().centerOfMass().y;            // bottom of the second's port below its centre
                 double up = faceA + 0.3 + faceB;
                 var axisY = a.orbital().axisY();
                 probe.orbital().state();
@@ -2803,7 +2807,8 @@ public final class SelfTest {
             BlockPos spawn = level.getSharedSpawnPos();
             final BlockPos[] at = new BlockPos[1];
             later(server, 2, () -> {
-                int x = spawn.getX() + 170;
+                // A fresh spot each run (the test world keeps what earlier runs built).
+                int x = spawn.getX() + 170 + new java.util.Random().nextInt(40) * 16;
                 int z = spawn.getZ() - 30;
                 for (int cx = (x >> 4) - 1; cx <= (x >> 4) + 1; cx++) {
                     for (int cz = (z >> 4) - 1; cz <= (z >> 4) + 1; cz++) {
