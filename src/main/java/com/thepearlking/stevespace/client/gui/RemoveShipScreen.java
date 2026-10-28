@@ -95,9 +95,13 @@ public class RemoveShipScreen extends Screen {
             return;
         }
         ShipPicture.draw(g, info.shape(), null, left + 12, top + 22, W - 24, 120, info.name());
-        g.drawCenteredString(font, Component.translatable(info.hasPort() ? "screen.stevespace.remove_ship.port"
-                : "screen.stevespace.remove_ship.no_port"), left + W / 2, top + 150, info.hasPort() ? RED : GREEN);
-        g.drawCenteredString(font, Component.translatable("screen.stevespace.remove_ship.gone"), left + W / 2, top + 164, 0xFFB8D8C4);
+        int y = top + 148;
+        for (var line : font.split(Component.translatable(info.hasPort() ? "screen.stevespace.remove_ship.port"
+                : "screen.stevespace.remove_ship.no_port"), W - 20)) {
+            g.drawCenteredString(font, line, left + W / 2, y, info.hasPort() ? RED : GREEN);
+            y += 10;
+        }
+        g.drawCenteredString(font, Component.translatable("screen.stevespace.remove_ship.gone"), left + W / 2, y + 4, 0xFFB8D8C4);
     }
 
     @Override
