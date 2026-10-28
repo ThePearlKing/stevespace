@@ -19,6 +19,7 @@ public final class SpaceShaders {
     private static ShaderInstance sun;
     private static ShaderInstance aurora;
     private static ShaderInstance puff;
+    private static ShaderInstance cloud;
 
     private SpaceShaders() {
     }
@@ -51,6 +52,11 @@ public final class SpaceShaders {
     /** Lit cloud puffs (mushroom clouds, exhaust columns, dust). */
     public static ShaderInstance puff() {
         return puff;
+    }
+
+    /** Storm clouds heaped up on a flat base. */
+    public static ShaderInstance cloud() {
+        return cloud;
     }
 
     /** Auroral curtains: rays, a sharp lower edge, colours by height. */
@@ -90,6 +96,9 @@ public final class SpaceShaders {
             event.registerShader(new ShaderInstance(event.getResourceProvider(),
                             ResourceLocation.fromNamespaceAndPath(StevesSpace.MODID, "puff"), DefaultVertexFormat.POSITION_TEX_COLOR_NORMAL),
                     shader -> puff = shader);
+            event.registerShader(new ShaderInstance(event.getResourceProvider(),
+                            ResourceLocation.fromNamespaceAndPath(StevesSpace.MODID, "cloud"), DefaultVertexFormat.POSITION_TEX_COLOR_NORMAL),
+                    shader -> cloud = shader);
         } catch (IOException e) {
             throw new IllegalStateException("Could not load Steve's Space shaders", e);
         }
