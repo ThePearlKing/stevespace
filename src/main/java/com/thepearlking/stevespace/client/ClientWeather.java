@@ -198,22 +198,46 @@ public final class ClientWeather {
             double perPixelY = Math.PI * geometry.radius() / MAP_H;
             double ry = s.radius() / perPixelY;
             double rx = ry / Math.max(0.05, Math.cos(lat));
-            int cx = (int) Math.round((lon + Math.PI) / (2 * Math.PI) * MAP_W);
-            int cy = (int) Math.round((Math.PI / 2 - lat) / Math.PI * MAP_H);
-            for (int y = (int) (cy - ry - 1); y <= cy + ry + 1; y++) {
-                if (y < 0 || y >= MAP_H) {
-                    continue;
-                }
-                for (int x = (int) (cx - rx - 1); x <= cx + rx + 1; x++) {
-                    double dx = (x - cx) / rx;
-                    double dy = (y - cy) / ry;
-                    double d = Math.sqrt(dx * dx + dy * dy);
-                    if (d >= 1) {
+            double cx = (lon + Math.PI) / (2 * Math.PI) * MAP_W;
+            double cy = (Math.PI / 2 - lat) / Math.PI * MAP_H;
+            // Not a disc: a cluster of uneven lobes, drawn out along the way the storm is blowing,
+            // with a thunderstorm's anvil streaming off downwind.
+            java.util.Random random = new java.util.Random(s.id() * 31L + 7);
+            double wind = Math.atan2(-s.vz(), s.vx());
+            if (Math.hypot(s.vx(), s.vz()) < 1e-9) {
+                wind = random.nextDouble() * Math.PI * 2;
+            }
+            int lobes = 5 + random.nextInt(5);
+            for (int k = 0; k < lobes + (s.thunder() ? 2 : 0); k++) {
+                boolean anvil = k >= lobes;
+                double along = anvil ? 0.5 + 0.6 * random.nextDouble() : (random.nextDouble() * 2 - 1) * 0.65;
+                double across = anvil ? (random.nextDouble() * 2 - 1) * 0.2 : (random.nextDouble() * 2 - 1) * 0.45;
+                double size = anvil ? 0.3 + 0.15 * random.nextDouble() : 0.22 + 0.35 * random.nextDouble();
+                double stretch = anvil ? 2.4 : 1 + 0.9 * random.nextDouble();
+                double turn = wind + (random.nextDouble() - 0.5) * 0.8;
+                double weight = anvil ? 0.7 : 0.8 + 0.2 * random.nextDouble();
+                double cos = Math.cos(wind);
+                double sin = Math.sin(wind);
+                double lx = cx + (along * cos - across * sin) * rx;
+                double ly = cy - (along * sin + across * cos) * ry;
+                double reach = size * stretch * Math.max(rx, ry) + 1;
+                for (int y = (int) (ly - reach - 1); y <= ly + reach + 1; y++) {
+                    if (y < 0 || y >= MAP_H) {
                         continue;
                     }
-                    double edge = d < 0.5 ? 1 : 1 - (d - 0.5) / 0.5;
-                    int i = y * MAP_W + Math.floorMod(x, MAP_W);
-                    cover[i] = (float) Math.max(cover[i], strength * edge * (0.75 + 0.25 * s.rain()));
+                    for (int x = (int) (lx - reach - 1); x <= lx + reach + 1; x++) {
+                        double dx = (x + 0.5 - lx) / rx;
+                        double dy = -(y + 0.5 - ly) / ry;
+                        double u = (dx * Math.cos(turn) + dy * Math.sin(turn)) / (size * stretch);
+                        double v = (-dx * Math.sin(turn) + dy * Math.cos(turn)) / size;
+                        double d = Math.sqrt(u * u + v * v);
+                        if (d >= 1) {
+                            continue;
+                        }
+                        double edge = 1 - d * d;
+                        int i = y * MAP_W + Math.floorMod(x, MAP_W);
+                        cover[i] = (float) Math.max(cover[i], strength * edge * weight * (0.75 + 0.25 * s.rain()));
+                    }
                 }
             }
         }

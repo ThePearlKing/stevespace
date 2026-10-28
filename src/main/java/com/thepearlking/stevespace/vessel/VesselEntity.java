@@ -134,6 +134,8 @@ public class VesselEntity extends Entity implements IEntityAdditionalSpawnData {
     private VesselControls pilotControls = VesselControls.IDLE;
     private final CabinCrew crew = new CabinCrew();
     private boolean crewDirty;
+    /** Ships docked together into this one: who each of them is (empty when it's just one ship). */
+    private List<DockedMembers.Member> members = new ArrayList<>();
     /** Ticks each crew record has had nobody aboard to match it (dropped after a while). */
     private final Map<java.util.UUID, Integer> crewAbsent = new java.util.HashMap<>();
     private CompoundTag clientCrewTag;
@@ -387,6 +389,7 @@ public class VesselEntity extends Entity implements IEntityAdditionalSpawnData {
             autopilot.load(tag.getCompound("autopilot"));
         }
         owner = tag.hasUUID("owner") ? tag.getUUID("owner") : null;
+        members = DockedMembers.load(tag.getList("members", net.minecraft.nbt.Tag.TAG_COMPOUND));
         if (tag.contains("lever")) {
             pilotControls = new VesselControls(tag.getDouble("lever"), 0, 0, 0);
         }
@@ -436,6 +439,9 @@ public class VesselEntity extends Entity implements IEntityAdditionalSpawnData {
         tag.putDouble("lever", pilotControls.throttle()); // the throttle as the pilot left it
         if (owner != null) {
             tag.putUUID("owner", owner);
+        }
+        if (!members.isEmpty()) {
+            tag.put("members", DockedMembers.save(members));
         }
         if (materialized()) {
             tag.putBoolean("materialized", true);
@@ -736,8 +742,17 @@ public class VesselEntity extends Entity implements IEntityAdditionalSpawnData {
     }
 
     private void glide() {
-        if (serverPosition == null || isGrounded() || com.thepearlking.stevespace.world.SpaceDimension.isSpace(level())) {
-            return; // in space it stays in its cell; only its flight moves
+        if (serverPosition == null || isGrounded()) {
+            return;
+        }
+        if (com.thepearlking.stevespace.world.SpaceDimension.isSpace(level())) {
+            // A ship in its own cell stays put (only its flight moves), but one visiting another's
+            // cell creeps about in it: ease after it, or it sits frozen and then jumps.
+            Vec3 next = position().add(serverPosition.subtract(position()).scale(0.35));
+            if (next.distanceToSqr(position()) > 1e-8) {
+                setPos(next.x, next.y, next.z);
+            }
+            return;
         }
         serverAge++;
         Vector3f v = velocity();
@@ -1624,6 +1639,8 @@ public class VesselEntity extends Entity implements IEntityAdditionalSpawnData {
             vessel.setUUID(parked.id()); // the same ship as before it parked (docking targets follow it)
         }
         vessel.owner = parked.owner();
+        vessel.members = DockedMembers.moved(DockedMembers.load(com.thepearlking.stevespace.world.ParkedShips.get(server).members(parked.cell())),
+                p -> p.subtract(origin));
         vessel.setStructure(structure);
         vessel.setCustomName(shipName(parked.name(), space));
         vessel.propellant = totalPropellant(structure);
@@ -1741,6 +1758,8 @@ public class VesselEntity extends Entity implements IEntityAdditionalSpawnData {
                 net.minecraft.network.chat.Component.Serializer.toJson(getName(), level.registryAccess()),
                 new BlockPos(minX, minY, minZ), new BlockPos(maxX, maxY, maxZ),
                 new com.thepearlking.stevespace.universe.DVec3(getX(), getY(), getZ()), getUUID(), owner));
+        com.thepearlking.stevespace.world.ParkedShips.get(server).putMembers(orbital.cell(),
+                DockedMembers.save(DockedMembers.moved(members, p -> origin.offset(p.rotate(rotation)))));
         List<Entity> riders = new ArrayList<>(getPassengers());
         allowDismount = true;
         ejectPassengers();
@@ -1814,6 +1833,17 @@ public class VesselEntity extends Entity implements IEntityAdditionalSpawnData {
      * come aboard, and the two orbits become one (by momentum). Returns false, changing nothing, if
      * the two aren't lined up square or their blocks would overlap.
      */
+    /** Who's in this ship: the ships docked into it, or just itself. */
+    private List<DockedMembers.Member> membersOrSelf() {
+        if (!members.isEmpty()) {
+            return members;
+        }
+        BlockPos block = !stats.seats().isEmpty() ? stats.seats().get(0).pos()
+                : structure.blocks().keySet().stream().min((a, b) -> Long.compare(a.asLong(), b.asLong())).orElse(BlockPos.ZERO);
+        return List.of(new DockedMembers.Member(block, getUUID(), owner,
+                net.minecraft.network.chat.Component.Serializer.toJson(getName(), registryAccess()), 1));
+    }
+
     boolean absorb(VesselEntity other, VesselStats.Port mine, VesselStats.Port theirs) {
         dematerialize(); // joined as one vessel, then back to blocks next tick
         other.dematerialize();
@@ -1862,6 +1892,16 @@ public class VesselEntity extends Entity implements IEntityAdditionalSpawnData {
                 a.position().scale(myMass / total).add(b.position().scale(theirMass / total)),
                 a.velocity().scale(myMass / total).add(b.velocity().scale(theirMass / total))));
         Vector3d oldCom = stats.centerOfMass();
+        // Remember who each ship is, and how much of the fuel is whose.
+        double myShare = propellant + other.propellant > 0 ? propellant / (propellant + other.propellant) : myMass / total;
+        List<DockedMembers.Member> joined = new ArrayList<>();
+        for (DockedMembers.Member who : membersOrSelf()) {
+            joined.add(who.scaled(myShare));
+        }
+        for (DockedMembers.Member who : other.membersOrSelf()) {
+            joined.add(who.moved(p -> anchor.offset(turn(snap, p.subtract(theirs.pos())))).scaled(1 - myShare));
+        }
+        members = joined;
         propellant += other.propellant;
         if (owner == null) {
             owner = other.owner;
@@ -1895,8 +1935,14 @@ public class VesselEntity extends Entity implements IEntityAdditionalSpawnData {
                     && there.getValue(com.thepearlking.stevespace.block.DockingPortBlock.FACING) == port.facing().getOpposite())) {
                 continue;
             }
-            // Everything reachable from the pilot's side without crossing this joint.
+            // Everything reachable from this ship's own side without crossing this joint (the
+            // pilot's side if nobody's recorded which is whose).
             BlockPos start = stats.seats().isEmpty() ? port.pos() : stats.seats().get(0).pos();
+            for (DockedMembers.Member m : members) {
+                if (m.id().equals(getUUID()) && structure.get(m.block()) != null) {
+                    start = m.block();
+                }
+            }
             java.util.Set<BlockPos> kept = new java.util.HashSet<>();
             java.util.ArrayDeque<BlockPos> queue = new java.util.ArrayDeque<>(List.of(start));
             kept.add(start);
@@ -1929,22 +1975,53 @@ public class VesselEntity extends Entity implements IEntityAdditionalSpawnData {
             VesselStructure partStructure = new VesselStructure(partBlocks, partTags);
             VesselStats keptStats = new VesselStats(keptStructure);
             VesselStats partStats = new VesselStats(partStructure);
-            double capacity = keptStats.propellantCapacity() + partStats.propellantCapacity();
-            double partPropellant = capacity > 0 ? propellant * partStats.propellantCapacity() / capacity : 0;
+            // Each ship goes off with its own share of the fuel (as it was when they docked, less
+            // what was burned since); with no record of whose it is, by tank space.
+            List<DockedMembers.Member> keptMembers = new ArrayList<>();
+            List<DockedMembers.Member> partMembers = new ArrayList<>();
+            for (DockedMembers.Member m : members) {
+                (partBlocks.containsKey(m.block()) ? partMembers : keptMembers).add(m);
+            }
+            double partPropellant;
+            if (!partMembers.isEmpty() && !keptMembers.isEmpty()) {
+                double all = members.stream().mapToDouble(DockedMembers.Member::share).sum();
+                partPropellant = all > 0 ? propellant * partMembers.stream().mapToDouble(DockedMembers.Member::share).sum() / all : 0;
+            } else {
+                double capacity = keptStats.propellantCapacity() + partStats.propellantCapacity();
+                partPropellant = capacity > 0 ? propellant * partStats.propellantCapacity() / capacity : 0;
+            }
             Vector3d oldCom = stats.centerOfMass();
+            List<VesselStats.Seat> oldSeats = stats.seats();
 
             VesselEntity part = new VesselEntity(ModEntities.VESSEL.get(), level());
             part.setStructure(partStructure);
             part.propellant = partPropellant;
             part.owner = owner;
+            DockedMembers.Member partWho = DockedMembers.primary(partMembers);
+            if (partWho != null) {
+                // It goes back to being the ship it was: same id (docking targets follow it), owner and name.
+                if (((ServerLevel) level()).getEntity(partWho.id()) == null) {
+                    part.setUUID(partWho.id());
+                }
+                part.owner = partWho.owner();
+            }
+            part.members = DockedMembers.normalized(partMembers);
             part.orientation.set(orientation);
             Vector3d partShift = orientation.transform(partStats.centerOfMass().sub(oldCom));
             part.setPos(getX() + partShift.x, getY() + partShift.y, getZ() + partShift.z);
             part.setGrounded(false);
-            part.setCustomName(net.minecraft.network.chat.Component.translatable("entity.stevespace.vessel.module", getName()));
+            part.setCustomName(partWho != null ? shipName(partWho.name(), (ServerLevel) level())
+                    : net.minecraft.network.chat.Component.translatable("entity.stevespace.vessel.module", getName()));
 
             propellant -= partPropellant;
             setStructure(keptStructure);
+            DockedMembers.Member keptWho = keptMembers.stream().filter(m -> m.id().equals(getUUID())).findFirst()
+                    .orElse(DockedMembers.primary(keptMembers));
+            if (keptWho != null) {
+                owner = keptWho.owner();
+                setCustomName(shipName(keptWho.name(), (ServerLevel) level()));
+            }
+            members = DockedMembers.normalized(keptMembers);
             Vector3d keptShift = orientation.transform(keptStats.centerOfMass().sub(oldCom));
             setPos(getX() + keptShift.x, getY() + keptShift.y, getZ() + keptShift.z);
 
@@ -1968,18 +2045,65 @@ public class VesselEntity extends Entity implements IEntityAdditionalSpawnData {
             dockCooldown = 200;
             part.syncState();
             level().addFreshEntity(part);
-            // Anyone beyond the seats this side still has moves across.
-            List<Entity> crew = new ArrayList<>(getPassengers());
-            for (int i = Math.max(1, stats.seats().size()); i < crew.size(); i++) {
-                allowDismount = true;
-                crew.get(i).stopRiding();
-                allowDismount = false;
-                crew.get(i).startRiding(part, true);
+            // Everyone goes with the side they're on: in a seat there, or standing nearest it.
+            for (Entity member : new ArrayList<>(getPassengers())) {
+                java.util.UUID id = member.getUUID();
+                int seat = crew.seatOf(id);
+                Vector3d walk = crew.walkPosition(id);
+                boolean onPart;
+                if (seat >= 0 && seat < oldSeats.size()) {
+                    onPart = partBlocks.containsKey(oldSeats.get(seat).pos());
+                } else if (walk != null) {
+                    onPart = nearest(partBlocks.keySet(), walk) < nearest(keptBlocks.keySet(), walk);
+                } else {
+                    onPart = false;
+                }
+                crew.remove(id);
+                if (onPart) {
+                    allowDismount = true;
+                    member.stopRiding();
+                    allowDismount = false;
+                    member.startRiding(part, true);
+                    if (seat >= 0) {
+                        int at = seatIndex(partStats, oldSeats.get(seat).pos());
+                        if (at >= 0) {
+                            part.crew.sit(id, at);
+                        }
+                    } else if (walk != null) {
+                        part.crew.walk(id, walk);
+                    }
+                    part.crewDirty = true;
+                } else if (seat >= 0) {
+                    int at = seatIndex(keptStats, oldSeats.get(seat).pos());
+                    if (at >= 0) {
+                        crew.sit(id, at);
+                    }
+                } else if (walk != null) {
+                    crew.walk(id, walk);
+                }
             }
+            crewDirty = true;
             syncState();
             return true;
         }
         return false;
+    }
+
+    private static double nearest(java.util.Set<BlockPos> blocks, Vector3d at) {
+        double best = Double.MAX_VALUE;
+        for (BlockPos p : blocks) {
+            best = Math.min(best, at.distanceSquared(p.getX() + 0.5, p.getY() + 0.5, p.getZ() + 0.5));
+        }
+        return best;
+    }
+
+    private static int seatIndex(VesselStats stats, BlockPos pos) {
+        for (int i = 0; i < stats.seats().size(); i++) {
+            if (stats.seats().get(i).pos().equals(pos)) {
+                return i;
+            }
+        }
+        return -1;
     }
 
     /** A block offset turned by a right-angle rotation matrix. */
@@ -2552,6 +2676,8 @@ public class VesselEntity extends Entity implements IEntityAdditionalSpawnData {
                 net.minecraft.network.chat.Component.Serializer.toJson(getName(), level.registryAccess()),
                 o.offset(boundsMin), o.offset(boundsMax), new com.thepearlking.stevespace.universe.DVec3(getX(), getY(), getZ()),
                 getUUID(), owner));
+        com.thepearlking.stevespace.world.ParkedShips.get(level.getServer()).putMembers(orbital.cell(),
+                DockedMembers.save(DockedMembers.moved(members, o::offset)));
         parking = true;
         discard();
         com.thepearlking.stevespace.StevesSpace.LOGGER.info("{} parked in orbit of {} (cell {})", getName().getString(), orbital.body().id(), orbital.cell());

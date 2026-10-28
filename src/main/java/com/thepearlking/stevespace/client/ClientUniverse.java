@@ -34,8 +34,15 @@ public final class ClientUniverse {
     private static double rate = 1;
     private static double lastServerTime = Double.NaN;
     private static long lastServerNanos;
-    /** An error left from the last update, folded in over the next second instead of jumping. */
+    /** An error left from the last update, folded in over the next second or so instead of jumping. */
     private static double correction;
+    /** How long (real seconds) the correction takes to fold in: never so fast that time runs backwards. */
+    private static double correctionSeconds = 1;
+    /**
+     * The time this frame is drawn at. Read live, the time moved between one thing drawn and the
+     * next (at 10,000,000\u00D7 a millisecond is hours), so things on the map jittered against each other.
+     */
+    private static double frameTime = Double.NaN;
 
     private ClientUniverse() {
     }
@@ -46,7 +53,7 @@ public final class ClientUniverse {
         if (system.earthDaySeconds() != earthDaySeconds || system.earthTurns(anchorTime) != anchorTurns) {
             system = new SolarSystem(earthDaySeconds, anchorTime, anchorTurns);
         }
-        double predicted = time();
+        double predicted = liveTime();
         long now = System.nanoTime();
         boolean warpChanged = serverWarp != warp;
         warp = serverWarp;
@@ -68,7 +75,10 @@ public final class ClientUniverse {
             // Carry on smoothly from where we are; make up the difference over the next second.
             baseTime = predicted;
             correction = serverTime - predicted;
+            // Catch up at no more than half as fast again (or half as slow): never backwards.
+            correctionSeconds = Math.max(1, Math.abs(correction) / (0.5 * Math.max(1, rate)));
         }
+        frameTime = Double.NaN;
         baseNanos = now;
         synced = true;
     }
@@ -85,13 +95,20 @@ public final class ClientUniverse {
         return synced;
     }
 
-    /** Current universe time in seconds, extrapolated between server updates. */
+    /** Current universe time in seconds, extrapolated between server updates; the same all through one frame. */
     public static double time() {
         if (!synced) {
             return 0;
         }
+        return Double.isNaN(frameTime) ? liveTime() : frameTime;
+    }
+
+    private static double liveTime() {
+        if (!synced) {
+            return 0;
+        }
         double elapsed = (System.nanoTime() - baseNanos) / 1e9;
-        return baseTime + elapsed * rate + Math.min(1, elapsed) * correction;
+        return baseTime + elapsed * rate + Math.min(1, elapsed / correctionSeconds) * correction;
     }
 
     /** The body whose surface the client is on (or high above, in a vessel), or null. */
@@ -160,6 +177,7 @@ public final class ClientUniverse {
 
     @SubscribeEvent
     public static void onRenderTick(TickEvent.RenderTickEvent.Pre event) {
+        frameTime = liveTime();
         applyLocalDayTime();
     }
 
@@ -171,6 +189,7 @@ public final class ClientUniverse {
     @SubscribeEvent
     public static void onLogout(ClientPlayerNetworkEvent.LoggingOut event) {
         synced = false;
+        frameTime = Double.NaN;
         com.thepearlking.stevespace.client.planet.PlanetMaps.clear();
     }
 

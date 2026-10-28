@@ -52,7 +52,9 @@ public class AutopilotScreen extends Screen {
                 b -> Minecraft.getInstance().setScreen(new DockScreen(this))).bounds(left + 12, y, W - 24, 20).build());
         y += 23;
         y = program(left, y, Autopilot.Program.APPROACH, body != null && com.thepearlking.stevespace.client.space.ClientTarget.active());
-        y = program(left, y, Autopilot.Program.UNDOCK, body != null);
+        // Aboard a docked ship in space (seated or walking round it, its orbit tracked or not).
+        boolean inSpace = Minecraft.getInstance().level != null && com.thepearlking.stevespace.world.SpaceDimension.isSpace(Minecraft.getInstance().level);
+        y = program(left, y, Autopilot.Program.UNDOCK, flying && inSpace);
         program(left, y, Autopilot.Program.OFF, flying);
     }
 

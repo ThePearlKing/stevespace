@@ -85,11 +85,14 @@ void main() {
     // Storms: the weather map says where. Read smoothly (the map is coarse), and a little off the
     // true spot by swirling amounts, so the systems have ragged, curling edges instead of discs.
     vec2 size = vec2(textureSize(Sampler1, 0));
-    vec2 warp = (vec2(fbm(q * 11.0, 4), fbm(q * 11.0 + vec3(5.2, 1.3, 7.7), 4)) - 0.5) * 7.0 / size;
+    vec2 warp = (vec2(fbm(q * 11.0, 4), fbm(q * 11.0 + vec3(5.2, 1.3, 7.7), 4)) - 0.5) * 9.0 / size
+            + (vec2(fbm(q * 40.0, 3), fbm(q * 40.0 + vec3(2.9, 8.1, 4.4), 3)) - 0.5) * 3.0 / size;
     float storm = smoothMap(texCoord0 + warp * far, size);
+    // Heaped up in clumps with gaps between (towers and the clear air round them), not one even sheet.
+    float clumps = fbm(q * 90.0, 3);
     float deckNear = step(0.5, storm + 0.3 * (texture(Sampler0, texCoord0 * 3.0 + vec2(Drift * 3.0 + 0.37, 0.11)).a - 0.5)
             + 0.15 * (texture(Sampler0, texCoord0 * 7.0 + vec2(Drift * 7.0 + 0.71, 0.53)).a - 0.5) + 0.2 * cloud.a);
-    float deckFar = smoothstep(0.38, 0.62, storm + 0.35 * (billow - 0.5) + 0.12 * (puff - 0.5));
+    float deckFar = smoothstep(0.42, 0.58, storm + 0.45 * (billow - 0.5) + 0.2 * (puff - 0.5) + 0.25 * (clumps - 0.5) * (1.0 - storm));
     float deck = mix(deckNear, deckFar, far);
 
     float a = max(fair, deck);
@@ -100,6 +103,6 @@ void main() {
     float day = smoothstep(-0.12, 0.15, ndl);
     float light = 0.04 + 0.96 * day * (0.6 + 0.4 * max(ndl, 0.0));
     // Towering tops catch more light, the gaps between them less.
-    light *= mix(1.0, 0.78 + 0.3 * (0.7 * billow + 0.3 * puff), max(deck, far * 0.5));
+    light *= mix(1.0, 0.72 + 0.4 * (0.5 * billow + 0.25 * puff + 0.25 * clumps), max(deck, far * 0.5));
     fragColor = vec4(vec3(light), a * 0.85 * Opacity);
 }

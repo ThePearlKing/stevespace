@@ -2033,6 +2033,54 @@ public final class ClientTest {
         }, 160));
         scenes.add(new Scene("acheron_deep_across", mc -> look(mc, mc.player.getYRot() + 120, 5), 40));
         scenes.add(new Scene("acheron_deep_roof", mc -> look(mc, mc.player.getYRot() + 100, -35), 40));
+        // Time warp on the map: the time must be the same all through a frame, and never step back.
+        scenes.add(new Scene("mapwarp_open", mc -> {
+            mc.setScreen(new com.thepearlking.stevespace.client.gui.MapScreen());
+            holdScreen = true;
+            for (int i = 0; i < 7; i++) {
+                com.thepearlking.stevespace.network.SpaceNetwork.sendToServer(new com.thepearlking.stevespace.network.WarpRequestC2S(1));
+            }
+            double[] pre = {Double.NaN};
+            double[] last = {Double.NaN};
+            int[] counts = new int[3]; // frames, frames whose time moved while drawing, steps back
+            double[] steps = {Double.MAX_VALUE, 0};
+            StevesSpace.LOGGER.info("[ClientTest] mapwarp listening");
+            net.minecraftforge.common.MinecraftForge.EVENT_BUS.addListener(net.minecraftforge.eventbus.api.EventPriority.NORMAL, false,
+                    net.minecraftforge.event.TickEvent.RenderTickEvent.Pre.class, e -> {
+                pre[0] = com.thepearlking.stevespace.client.ClientUniverse.time();
+            });
+            net.minecraftforge.common.MinecraftForge.EVENT_BUS.addListener(net.minecraftforge.eventbus.api.EventPriority.NORMAL, false,
+                    net.minecraftforge.event.TickEvent.RenderTickEvent.Post.class, e -> {
+                if (com.thepearlking.stevespace.client.ClientUniverse.warp() < 100_000 || counts[0] >= 400) {
+                    return;
+                }
+                double now = com.thepearlking.stevespace.client.ClientUniverse.time();
+                counts[0]++;
+                if (now != pre[0]) {
+                    counts[1]++;
+                }
+                if (!Double.isNaN(last[0])) {
+                    double step = now - last[0];
+                    if (step < 0) {
+                        counts[2]++;
+                    }
+                    steps[0] = Math.min(steps[0], step);
+                    steps[1] = Math.max(steps[1], step);
+                }
+                last[0] = now;
+                if (counts[0] % 50 == 0) {
+                    StevesSpace.LOGGER.info("[ClientTest] mapwarp frames {} moved-mid-frame {} backwards {} step min {} max {}",
+                            counts[0], counts[1], counts[2], steps[0], steps[1]);
+                }
+            });
+        }, 300));
+        scenes.add(new Scene("mapwarp_done", mc -> {
+            for (int i = 0; i < 8; i++) {
+                com.thepearlking.stevespace.network.SpaceNetwork.sendToServer(new com.thepearlking.stevespace.network.WarpRequestC2S(-1));
+            }
+            holdScreen = false;
+            mc.setScreen(null);
+        }, 20));
         scenes.add(new Scene("weather_storm", mc -> playerCommand(mc, "weather thunder"), 260));
         scenes.add(new Scene("weather_far", mc -> command(mc, "tp @a 3000 140 0"), 200));
         scenes.add(new Scene("weather_far_look", mc -> look(mc, 90, -6), 40));
@@ -2179,7 +2227,32 @@ public final class ClientTest {
             });
         }, 600));
         for (String step : new String[]{"b", "c", "d", "e", "f"}) {
-            scenes.add(new Scene("dockfly_" + step, mc -> { }, 600));
+            scenes.add(new Scene("dockfly_" + step, mc -> {
+                mc.options.setCameraType(net.minecraft.client.CameraType.THIRD_PERSON_BACK);
+                look(mc, 0, 60);
+                // Where the server has each ship, and where this client draws it, every second.
+                new Thread(() -> {
+                    for (int i = 0; i < 28; i++) {
+                        try {
+                            Thread.sleep(1000);
+                        } catch (InterruptedException ignored) {
+                        }
+                        mc.execute(() -> {
+                            IntegratedServer server = mc.getSingleplayerServer();
+                            StringBuilder line = new StringBuilder("[ClientTest] dockfly pos");
+                            for (var e : mc.level.entitiesForRendering()) {
+                                if (e instanceof com.thepearlking.stevespace.vessel.VesselEntity v) {
+                                    var sv = server.getLevel(com.thepearlking.stevespace.world.SpaceDimension.KEY).getEntity(v.getUUID());
+                                    line.append(String.format(java.util.Locale.ROOT, " | %s client %.1f %.1f %.1f server %s", v.getName().getString(),
+                                            v.getX(), v.getY(), v.getZ(), sv == null ? "-" : String.format(java.util.Locale.ROOT, "%.1f %.1f %.1f",
+                                                    sv.getX(), sv.getY(), sv.getZ())));
+                                }
+                            }
+                            StevesSpace.LOGGER.info(line.toString());
+                        });
+                    }
+                }, "stevespace-clienttest-dockpos").start();
+            }, 600));
         }
         scenes.add(new Scene("dockfly_done", mc -> mc.options.setCameraType(net.minecraft.client.CameraType.FIRST_PERSON), 5));
         // The new blocks on a little hull: RCS clusters, a docking port sharing power (red) and one not.

@@ -101,7 +101,8 @@ public final class VesselServer {
                                    double latitude, double longitude) {
         Entity vehicle = player.getVehicle();
         if (program == Autopilot.Program.UNDOCK) {
-            if (vehicle instanceof VesselEntity vessel && !vessel.undock()) {
+            VesselEntity ship = vehicle instanceof VesselEntity v ? v : VesselEntity.shipOf(player, 2);
+            if (ship == null || !ship.undock()) {
                 player.displayClientMessage(Component.translatable("stevespace.vessel.nothing_to_undock"), true);
             }
             return;

@@ -2548,6 +2548,10 @@ public final class SelfTest {
 
     static final class DockingTests {
 
+        private static final java.util.UUID PROBE_OWNER = java.util.UUID.fromString("00000000-0000-0000-0000-0000000000b0");
+        private static final double[] probeFuel = new double[1];
+        private static final java.util.UUID[] probeId = new java.util.UUID[1];
+
         private static com.thepearlking.stevespace.vessel.VesselStructure module() {
             var blocks = new java.util.HashMap<BlockPos, net.minecraft.world.level.block.state.BlockState>();
             blocks.put(new BlockPos(0, 0, 0), com.thepearlking.stevespace.registry.ModBlocks.HULL_GREY.get().defaultBlockState());
@@ -2573,8 +2577,14 @@ public final class SelfTest {
                 blocks.put(new BlockPos(0, 0, 0), com.thepearlking.stevespace.registry.ModBlocks.DOCKING_PORT.get().defaultBlockState()
                         .setValue(com.thepearlking.stevespace.block.DockingPortBlock.FACING, net.minecraft.core.Direction.DOWN));
                 blocks.put(new BlockPos(0, 1, 0), com.thepearlking.stevespace.registry.ModBlocks.HULL_GREY.get().defaultBlockState());
+                blocks.put(new BlockPos(0, 2, 0), com.thepearlking.stevespace.registry.ModBlocks.PROPELLANT_TANK.get().defaultBlockState());
                 var probe = com.thepearlking.stevespace.vessel.VesselEntity.spawnInOrbit(space,
                         new com.thepearlking.stevespace.vessel.VesselStructure(blocks, new java.util.HashMap<>()), earth, state, new org.joml.Quaterniond());
+                // Its own name, owner and fuel: undocking must give all of them back, and take none.
+                probe.setCustomName(net.minecraft.network.chat.Component.literal("Probe"));
+                com.thepearlking.stevespace.vessel.VesselEntityAccess.setOwner(probe, PROBE_OWNER);
+                probe.fillTanks();
+                probeId[0] = probe.getUUID();
                 var a = pair[0];
                 double faceA = 2.0 - a.stats().centerOfMass().y;          // top of the first port above its centre
                 double faceB = probe.stats().centerOfMass().y;            // bottom of the second's port below its centre
@@ -2591,16 +2601,30 @@ public final class SelfTest {
                     StevesSpace.LOGGER.info("[SelfTest] docking: a at {} b at {} anchor={} sep={}", pair[0].position(), pair[1].position(),
                             pair[1].orbital().anchor(), pair[1].orbital().state().position().sub(pair[0].orbital().state().position()).length());
                 }
-                return pair[1] != null && pair[1].isRemoved();
+                return pair[1] != null && (pair[0].isRemoved() || pair[1].isRemoved());
             }, () -> {
-                var a = pair[0];
-                check("vessels-dock", pair[1] != null && pair[1].isRemoved() && a.structure().size() == 4 && a.stats().ports().size() == 2,
-                        "visitor removed=" + (pair[1] != null && pair[1].isRemoved()) + " blocks=" + a.structure().size());
+                // Whichever hosted (the bigger one) is left holding both.
+                var a = pair[0].isRemoved() ? pair[1] : pair[0];
+                check("vessels-dock", pair[1] != null && (pair[0].isRemoved() || pair[1].isRemoved()) && a.structure().size() == 5
+                                && a.stats().ports().size() == 2,
+                        "one removed=" + (pair[0].isRemoved() || pair[1] != null && pair[1].isRemoved()) + " blocks=" + a.structure().size());
             });
             later(server, 5, () -> {
-                var a = pair[0];
-                boolean split = a.undock();
-                check("vessels-undock", split && a.structure().size() == 2, "split=" + split + " blocks=" + a.structure().size());
+                var joined = pair[0].isRemoved() ? pair[1] : pair[0];
+                java.util.UUID moduleId = pair[0].getUUID();
+                probeFuel[0] = joined.propellant(); // all of it the probe's (the module has no tanks)
+                boolean split = joined.undock();
+                ServerLevel space = server.getLevel(com.thepearlking.stevespace.world.SpaceDimension.KEY);
+                var back = space.getEntity(probeId[0]) instanceof com.thepearlking.stevespace.vessel.VesselEntity v ? v : null;
+                var a = space.getEntity(moduleId) instanceof com.thepearlking.stevespace.vessel.VesselEntity v ? v : null;
+                check("vessels-undock", split && a != null && a.structure().size() == 2 && back != null && back.structure().size() == 3,
+                        "split=" + split + " module " + (a == null ? "gone" : a.structure().size()) + " probe " + (back == null ? "gone" : back.structure().size()));
+                check("undock-gives-back-what-is-whose", back != null && a != null && back.getName().getString().equals("Probe")
+                                && PROBE_OWNER.equals(back.owner()) && probeFuel[0] > 0 && Math.abs(back.propellant() - probeFuel[0]) < 1e-6
+                                && a.propellant() < 1e-6 && a.owner() == null && !a.getName().getString().contains("Probe"),
+                        back == null || a == null ? "probe " + back + " module " + a : back.getName().getString() + " owner " + back.owner()
+                                + " fuel " + back.propellant() + "/" + probeFuel[0] + "; other " + a.getName().getString() + " owner " + a.owner()
+                                + " fuel " + a.propellant());
             });
             later(server, 60, () -> {
                 var a = pair[0];

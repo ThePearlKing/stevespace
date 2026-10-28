@@ -60,6 +60,8 @@ public final class ParkedShips extends SavedData {
     }
 
     private final Map<Integer, Parked> ships = new HashMap<>();
+    /** Ships docked together and parked as one: who each of them is (block positions in the level). */
+    private final Map<Integer, ListTag> members = new HashMap<>();
 
     public static ParkedShips get(MinecraftServer server) {
         return server.overworld().getDataStorage().computeIfAbsent(
@@ -100,7 +102,23 @@ public final class ParkedShips extends SavedData {
         setDirty();
     }
 
+    /** Who the ships docked together in a parked cell are (blocks in level coordinates), or an empty list. */
+    public ListTag members(int cell) {
+        ListTag list = members.get(cell);
+        return list == null ? new ListTag() : list.copy();
+    }
+
+    public void putMembers(int cell, ListTag list) {
+        if (list.isEmpty()) {
+            members.remove(cell);
+        } else {
+            members.put(cell, list.copy());
+        }
+        setDirty();
+    }
+
     public Parked remove(int cell) {
+        members.remove(cell);
         Parked removed = ships.remove(cell);
         if (removed != null) {
             setDirty();
@@ -116,6 +134,9 @@ public final class ParkedShips extends SavedData {
                     new StateVector(vec(s, "r"), vec(s, "v")), s.getDouble("time"), s.getString("name"),
                     BlockPos.of(s.getLong("min")), BlockPos.of(s.getLong("max")), vec(s, "anchor"),
                     s.hasUUID("id") ? s.getUUID("id") : null, s.hasUUID("owner") ? s.getUUID("owner") : null));
+            if (s.contains("members")) {
+                data.members.put(s.getInt("cell"), s.getList("members", Tag.TAG_COMPOUND));
+            }
         }
         return data;
     }
@@ -134,6 +155,9 @@ public final class ParkedShips extends SavedData {
             s.putLong("min", p.min().asLong());
             s.putLong("max", p.max().asLong());
             putVec(s, "anchor", p.anchor());
+            if (members.containsKey(p.cell())) {
+                s.put("members", members.get(p.cell()));
+            }
             if (p.id() != null) {
                 s.putUUID("id", p.id());
             }
