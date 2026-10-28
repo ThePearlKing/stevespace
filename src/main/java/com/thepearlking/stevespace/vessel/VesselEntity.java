@@ -154,6 +154,11 @@ public class VesselEntity extends Entity implements IEntityAdditionalSpawnData {
     private final Autopilot autopilot = new Autopilot();
     /** Where the autopilot wants the engines to push (world axes), or null to fly by hand. */
     private DVec3 steerTarget;
+    /**
+     * Visiting a ship that is blocks: its blocks stand upright in the cell whichever way it really
+     * points, so this visitor is drawn turned into that ship's own frame (null otherwise).
+     */
+    private Quaterniond shownFrame;
     /** A whole attitude the autopilot wants held (vessel to world axes), or null. */
     private Quaterniond steerAttitude;
     /** The push the autopilot wants from the RCS thrusters (world axes, blocks/s²), or null. */
@@ -276,6 +281,10 @@ public class VesselEntity extends Entity implements IEntityAdditionalSpawnData {
         return new Quaterniond(orientation);
     }
 
+    void setShownFrame(Quaterniond frame) {
+        shownFrame = frame;
+    }
+
     void setOwner(java.util.UUID owner) {
         this.owner = owner;
     }
@@ -342,7 +351,8 @@ public class VesselEntity extends Entity implements IEntityAdditionalSpawnData {
     }
 
     private void syncState() {
-        entityData.set(ORIENTATION, new Quaternionf((float) orientation.x, (float) orientation.y, (float) orientation.z, (float) orientation.w));
+        Quaterniond drawn = shownFrame != null ? new Quaterniond(shownFrame).mul(orientation) : orientation;
+        entityData.set(ORIENTATION, new Quaternionf((float) drawn.x, (float) drawn.y, (float) drawn.z, (float) drawn.w));
         entityData.set(SPIN, new Vector3f((float) angularVelocity.x, (float) angularVelocity.y, (float) angularVelocity.z));
         entityData.set(STAMP, tickCount);
         if (orbital != null) {

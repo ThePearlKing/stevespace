@@ -86,19 +86,24 @@ public final class Rendezvous {
     }
 
     /**
-     * Which of two meeting vessels keeps its cell (the other comes to it): one nobody is flying
-     * (a station) over one being flown, then the bigger, then the older.
+     * Which of two meeting vessels keeps its cell (the other comes to it): one with people aboard
+     * over one without (moving a ship with its crew to another cell carries them thousands of
+     * blocks, and their screens with them), then the bigger, then the older.
      */
     private static boolean hosts(VesselEntity a, VesselEntity b) {
-        boolean flownA = a.pilot() != null;
-        boolean flownB = b.pilot() != null;
-        if (flownA != flownB) {
-            return !flownA;
+        boolean crewedA = crewed(a);
+        boolean crewedB = crewed(b);
+        if (crewedA != crewedB) {
+            return crewedA;
         }
         if (a.structure().size() != b.structure().size()) {
             return a.structure().size() > b.structure().size();
         }
         return a.getId() < b.getId();
+    }
+
+    private static boolean crewed(VesselEntity v) {
+        return v.pilot() != null || !v.getPassengers().isEmpty() || v.materialized() && !v.playersAboard(2).isEmpty();
     }
 
     /**
@@ -227,11 +232,23 @@ public final class Rendezvous {
         return position.sub(h.state().position());
     }
 
-    /** Where a visitor sits in its host's cell: its real offset, in the host's axes. */
+    /**
+     * Where a visitor sits in its host's cell: its real offset, in the host's axes; when the host
+     * is blocks (which stand upright in the cell whichever way it points), in the host's own frame.
+     */
     static Vec3 spot(VesselEntity v, VesselEntity host) {
         OrbitalFlight h = host.orbital();
         DVec3 offset = offset(v, host);
-        return new Vec3(host.getX() + offset.dot(h.axisX()), host.getY() + offset.dot(h.axisY()), host.getZ() + offset.dot(h.axisZ()));
+        Vector3d rel = new Vector3d(offset.dot(h.axisX()), offset.dot(h.axisY()), offset.dot(h.axisZ()));
+        if (host.materialized()) {
+            host.orientationCopy().conjugate().transform(rel);
+        }
+        return new Vec3(host.getX() + rel.x, host.getY() + rel.y, host.getZ() + rel.z);
+    }
+
+    /** The turn into a host's own frame (when it's blocks), for showing a visitor in it; else null. */
+    private static org.joml.Quaterniond frameOf(VesselEntity host) {
+        return host.materialized() ? host.orientationCopy().conjugate() : null;
     }
 
     /**
@@ -246,6 +263,7 @@ public final class Rendezvous {
             return false;
         }
         v.setPos(at.x, at.y, at.z);
+        v.setShownFrame(frameOf(host));
         return true;
     }
 
@@ -260,6 +278,7 @@ public final class Rendezvous {
         int oldCell = v.orbital().cell();
         v.orbital().setCell(host.orbital().cell(), host.getUUID());
         v.setPos(at.x, at.y, at.z);
+        v.setShownFrame(frameOf(host));
         SpaceCells.get(space.getServer()).free(oldCell);
         com.thepearlking.stevespace.StevesSpace.LOGGER.info("Vessel {} joins {}'s cell ({} blocks apart)", v.getId(), host.getId(),
                 String.format(java.util.Locale.ROOT, "%.1f", separation(v, host)));
@@ -275,6 +294,7 @@ public final class Rendezvous {
         }
         int cell = cells.allocate();
         v.orbital().setCell(cell, null);
+        v.setShownFrame(null);
         v.teleportTo(centre.x, centre.y, centre.z);
         return true;
     }

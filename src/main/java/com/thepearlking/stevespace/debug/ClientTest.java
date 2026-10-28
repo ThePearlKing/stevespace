@@ -2163,7 +2163,6 @@ public final class ClientTest {
                 player.teleportTo(space, mine.getX(), mine.getY() + 1, mine.getZ(), java.util.Set.of(), 0, 0);
                 player.startRiding(mine, true);
             });
-            mc.options.setCameraType(net.minecraft.client.CameraType.THIRD_PERSON_BACK);
         }, 60));
         scenes.add(new Scene("dockfly_go", mc -> {
             IntegratedServer server = mc.getSingleplayerServer();
@@ -2171,6 +2170,8 @@ public final class ClientTest {
                 var player = server.getPlayerList().getPlayers().get(0);
                 var list = com.thepearlking.stevespace.vessel.DockList.build(player);
                 var entry = list.ships().stream().filter(e -> e.name().contains("Outpost")).findFirst().orElse(null);
+                StevesSpace.LOGGER.info("[ClientTest] dockfly: {} ships listed, outpost {}, my ports {}", list.ships().size(), entry != null,
+                        list.mine().size());
                 if (entry != null && !list.mine().isEmpty()) {
                     com.thepearlking.stevespace.vessel.VesselServer.onDock(player, entry.id(), entry.cell(), list.mine().get(0).pos(),
                             entry.ports().get(0).pos());

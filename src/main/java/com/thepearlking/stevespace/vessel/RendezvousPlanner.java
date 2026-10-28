@@ -106,8 +106,8 @@ public final class RendezvousPlanner {
             return null; // would leave, or dip into the air
         }
         StateVector end = transfer.stateAt(arrive, mu);
-        if (end.position().sub(there.position()).length() > 5) {
-            return null;
+        if (end.position().sub(there.position()).length() > 5 || end.velocity().sub(there.velocity()).length() > 40) {
+            return null; // missed, or arriving far too fast to stop beside it
         }
         return new Plan(depart, v1.sub(from.velocity()), arrive, end.velocity().sub(there.velocity()).length());
     }
