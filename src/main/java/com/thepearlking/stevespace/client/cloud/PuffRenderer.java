@@ -231,6 +231,7 @@ public final class PuffRenderer {
         stack.popMatrix();
         RenderSystem.applyModelViewMatrix();
         RenderSystem.restoreProjectionMatrix();
+        RenderSystem.depthMask(true); // the far terrain clears depth next, and a clear skips masked-off depth
         RenderSystem.enableCull();
         RenderSystem.defaultBlendFunc();
     }

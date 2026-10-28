@@ -128,6 +128,7 @@ public final class FarTerrain {
         FarStructures.draw(pose, projection, shader, meshX, meshZ);
         // Storm clouds out here too, so the hills in front hide them.
         com.thepearlking.stevespace.client.ClientWeather.drawFar(pose.last().pose(), projection, (float) scale, flat, camera);
+        RenderSystem.depthMask(true); // or the clear leaves the far ground's depth, and it covers the chunks
         RenderSystem.clear(GL11.GL_DEPTH_BUFFER_BIT, Minecraft.ON_OSX);
         RenderSystem.depthMask(false);
         RenderSystem.disableCull();
