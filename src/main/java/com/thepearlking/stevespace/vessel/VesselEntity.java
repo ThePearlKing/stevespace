@@ -318,6 +318,12 @@ public class VesselEntity extends Entity implements IEntityAdditionalSpawnData {
         return orbital.state().position().add(orbital.toInertial(local.x, local.y, local.z));
     }
 
+    /** A direction in the ship's own axes, in fixed space (the same way its ports are placed); orbit only. */
+    public DVec3 directionInertial(double x, double y, double z) {
+        Vector3d d = orientation.transform(new Vector3d(x, y, z));
+        return orbital.toInertial(d.x, d.y, d.z);
+    }
+
     /** The way a docking port points (inertial); orbit only. */
     public DVec3 portDirectionInertial(VesselStats.Port port) {
         Vector3d d = orientation.transform(new Vector3d(port.facing().getStepX(), port.facing().getStepY(), port.facing().getStepZ()));
@@ -1695,7 +1701,7 @@ public class VesselEntity extends Entity implements IEntityAdditionalSpawnData {
     }
 
     /** Every vessel on this server (for rendezvous and tracking). */
-    static List<VesselEntity> serverVessels() {
+    public static List<VesselEntity> serverVessels() {
         return List.copyOf(SERVER_VESSELS);
     }
 
@@ -1909,13 +1915,31 @@ public class VesselEntity extends Entity implements IEntityAdditionalSpawnData {
         setStructure(new VesselStructure(blocks, entities));
         Vector3d shift = orientation.transform(stats.centerOfMass().sub(oldCom));
         setPos(getX() + shift.x, getY() + shift.y, getZ() + shift.z);
-        // The other crew comes aboard.
+        // The other crew comes aboard, each where they were: in the same seat, or standing on the same spot.
+        List<VesselStats.Seat> theirSeats = other.stats.seats();
         List<Entity> crew = new ArrayList<>(other.getPassengers());
         other.allowDismount = true;
         other.ejectPassengers();
         for (Entity member : crew) {
+            java.util.UUID id = member.getUUID();
+            int seat = other.crew.seatOf(id);
+            Vector3d walk = other.crew.walkPosition(id);
+            if (seat >= 0 && seat < theirSeats.size()) {
+                int at = seatIndex(stats, anchor.offset(turn(snap, theirSeats.get(seat).pos().subtract(theirs.pos()))));
+                if (at >= 0 && this.crew.seatFree(at)) {
+                    this.crew.sit(id, at);
+                }
+            } else if (walk != null) {
+                // A point among their blocks, turned about block centres like the blocks are.
+                Vector3d d = new Vector3d(walk).sub(theirs.pos().getX() + 0.5, theirs.pos().getY() + 0.5, theirs.pos().getZ() + 0.5);
+                Vector3d t = new Vector3d(snap[0][0] * d.x + snap[0][1] * d.y + snap[0][2] * d.z,
+                        snap[1][0] * d.x + snap[1][1] * d.y + snap[1][2] * d.z,
+                        snap[2][0] * d.x + snap[2][1] * d.y + snap[2][2] * d.z);
+                this.crew.walk(id, t.add(anchor.getX() + 0.5, anchor.getY() + 0.5, anchor.getZ() + 0.5));
+            }
             member.startRiding(this, true);
         }
+        crewDirty = true;
         other.discard();
         syncState();
         com.thepearlking.stevespace.StevesSpace.LOGGER.info("Vessel {} docked with {} (both upright: {})", getId(), other.getId(), snap[1][1] == 1);

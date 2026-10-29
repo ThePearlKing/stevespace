@@ -33,6 +33,9 @@ public final class ClientTest {
     private static int waitTicks;
     private static int ticksInWorld;
     private static boolean worldRequested;
+    private static int joinRetry;
+    /** This run's station name (old test worlds keep earlier ones). */
+    private static final long mpRun = System.currentTimeMillis() % 100000;
     private static boolean holdScreen;
     private static net.minecraft.core.BlockPos rocketSeat;
     private static com.thepearlking.stevespace.vessel.VesselEntity testFire;
@@ -2255,6 +2258,131 @@ public final class ClientTest {
             }, 600));
         }
         scenes.add(new Scene("dockfly_done", mc -> mc.options.setCameraType(net.minecraft.client.CameraType.FIRST_PERSON), 5));
+        // Multiplayer: this client opens its world to a second one ("Watcher", standing on a station),
+        // then flies in and docks; the watcher's own client (mpwatch scenes) records what it sees.
+        scenes.add(new Scene("mphost_open", mc -> {
+            IntegratedServer server = mc.getSingleplayerServer();
+            server.execute(() -> {
+                server.publishServer(net.minecraft.world.level.GameType.CREATIVE, true, 25611);
+                server.setUsesAuthentication(false);
+            });
+            StevesSpace.LOGGER.info("[ClientTest] mp: world open on 25611");
+            waitFor(() -> server.getPlayerCount() >= 2, 20 * 600);
+        }, 100));
+        scenes.add(new Scene("mphost_setup", mc -> {
+            command(mc, "gamemode creative @a");
+            IntegratedServer server = mc.getSingleplayerServer();
+            server.execute(() -> {
+                var space = server.getLevel(com.thepearlking.stevespace.world.SpaceDimension.KEY);
+                // Ships left in the test world by earlier runs would get in the way: gone.
+                for (var old : new java.util.ArrayList<>(com.thepearlking.stevespace.vessel.VesselEntity.serverVessels())) {
+                    if (old.getPassengers().isEmpty()) {
+                        old.discard();
+                    }
+                }
+                var parkedShips = com.thepearlking.stevespace.world.ParkedShips.get(server);
+                for (var old : new java.util.ArrayList<>(parkedShips.all())) {
+                    parkedShips.remove(old.cell());
+                }
+                var earth = com.thepearlking.stevespace.universe.ServerUniverse.system().earth();
+                double r = earth.radius() + 3200;
+                double mu = earth.mu() * com.thepearlking.stevespace.config.SpaceConfig.GRAVITY_SCALE.get();
+                java.util.function.DoubleFunction<com.thepearlking.stevespace.universe.StateVector> at = a -> new com.thepearlking.stevespace.universe.StateVector(
+                        new com.thepearlking.stevespace.universe.DVec3(r * Math.cos(a), r * Math.sin(a), 0),
+                        new com.thepearlking.stevespace.universe.DVec3(-Math.sin(a), Math.cos(a), 0).scale(Math.sqrt(mu / r)));
+                var hull = com.thepearlking.stevespace.registry.ModBlocks.HULL_WHITE.get().defaultBlockState();
+                var port = com.thepearlking.stevespace.registry.ModBlocks.DOCKING_PORT.get().defaultBlockState();
+                // A tower with its port underneath and a ledge part way up for the watcher to stand on.
+                var station = new java.util.HashMap<net.minecraft.core.BlockPos, net.minecraft.world.level.block.state.BlockState>();
+                for (int y = 0; y < 8; y++) {
+                    station.put(new net.minecraft.core.BlockPos(0, y, 0), hull);
+                    station.put(new net.minecraft.core.BlockPos(1, y, 0), hull);
+                }
+                for (int x = 2; x < 5; x++) {
+                    station.put(new net.minecraft.core.BlockPos(x, 5, 0), hull);
+                    station.put(new net.minecraft.core.BlockPos(x, 5, 1), hull);
+                }
+                station.put(new net.minecraft.core.BlockPos(1, -1, 0), port.setValue(com.thepearlking.stevespace.block.DockingPortBlock.FACING,
+                        net.minecraft.core.Direction.DOWN));
+                var st = com.thepearlking.stevespace.vessel.VesselEntity.spawnInOrbit(space,
+                        new com.thepearlking.stevespace.vessel.VesselStructure(station, new java.util.HashMap<>()), earth, at.apply(2.0), new org.joml.Quaterniond());
+                st.setCustomName(net.minecraft.network.chat.Component.literal("Watch Station " + mpRun));
+                st.park(null);
+                var parked = com.thepearlking.stevespace.world.ParkedShips.get(server).get(st.orbital().cell());
+                var watcher = server.getPlayerList().getPlayerByName("Watcher");
+                if (watcher != null && parked != null) {
+                    // On the ledge's far end, by the top of the blocks.
+                    // Beside the tower's foot (still aboard), with a clear view down past the port.
+                    watcher.teleportTo(space, parked.min().getX() + 3.5, parked.min().getY() + 2, parked.min().getZ() + 0.5,
+                            java.util.Set.of(), 90, 45);
+                    StevesSpace.LOGGER.info("[ClientTest] mp: watcher on the station at {}", watcher.position());
+                }
+                var ship = new java.util.HashMap<net.minecraft.core.BlockPos, net.minecraft.world.level.block.state.BlockState>();
+                ship.put(new net.minecraft.core.BlockPos(0, 0, 0), com.thepearlking.stevespace.registry.ModBlocks.ROCKET_ENGINE.get().defaultBlockState());
+                ship.put(new net.minecraft.core.BlockPos(0, 1, 0), com.thepearlking.stevespace.registry.ModBlocks.PROPELLANT_TANK.get().defaultBlockState());
+                ship.put(new net.minecraft.core.BlockPos(0, 2, 0), com.thepearlking.stevespace.registry.ModBlocks.PILOT_SEAT.get().defaultBlockState());
+                ship.put(new net.minecraft.core.BlockPos(0, 3, 0), hull);
+                ship.put(new net.minecraft.core.BlockPos(0, 4, 0), port);
+                for (var d : new net.minecraft.core.Direction[]{net.minecraft.core.Direction.NORTH, net.minecraft.core.Direction.SOUTH,
+                        net.minecraft.core.Direction.EAST, net.minecraft.core.Direction.WEST}) {
+                    ship.put(new net.minecraft.core.BlockPos(0, 1, 0).relative(d), com.thepearlking.stevespace.registry.ModBlocks.RCS_THRUSTER.get()
+                            .defaultBlockState().setValue(com.thepearlking.stevespace.block.RcsThrusterBlock.FACING, d));
+                }
+                var mine = com.thepearlking.stevespace.vessel.VesselEntity.spawnInOrbit(space,
+                        new com.thepearlking.stevespace.vessel.VesselStructure(ship, new java.util.HashMap<>()), earth, at.apply(2.0 - 300 / r),
+                        new org.joml.Quaterniond());
+                mine.fillTanks();
+                var player = server.getPlayerList().getPlayers().stream().filter(p -> !p.getGameProfile().getName().equals("Watcher"))
+                        .findFirst().orElseThrow();
+                player.teleportTo(space, mine.getX(), mine.getY() + 1, mine.getZ(), java.util.Set.of(), 0, 0);
+                player.startRiding(mine, true);
+            });
+        }, 100));
+        scenes.add(new Scene("mphost_go", mc -> {
+            IntegratedServer server = mc.getSingleplayerServer();
+            server.execute(() -> {
+                var player = server.getPlayerList().getPlayers().stream().filter(p -> !p.getGameProfile().getName().equals("Watcher"))
+                        .findFirst().orElseThrow();
+                var list = com.thepearlking.stevespace.vessel.DockList.build(player);
+                var entry = list.ships().stream().filter(e -> e.name().equals("Watch Station " + mpRun)).findFirst().orElse(null);
+                StevesSpace.LOGGER.info("[ClientTest] mp: {} ships listed, station {}, my ports {}", list.ships().size(), entry != null,
+                        list.mine().size());
+                if (entry != null && !list.mine().isEmpty()) {
+                    com.thepearlking.stevespace.vessel.VesselServer.onDock(player, entry.id(), entry.cell(), list.mine().get(0).pos(),
+                            entry.ports().get(0).pos());
+                }
+            });
+            mc.options.setCameraType(net.minecraft.client.CameraType.FIRST_PERSON);
+            look(mc, 0, -70);
+            logVessels(mc, "host", 28);
+        }, 600));
+        for (String step : new String[]{"b", "c", "d", "e", "f", "g", "h", "i", "j", "k", "l", "m", "n", "o", "p"}) {
+            scenes.add(new Scene("mphost_" + step, mc -> {
+                look(mc, mc.player.getYRot(), -70);
+                logVessels(mc, "host", 28);
+                // Done as soon as they're one ship.
+                waitFor(() -> docked(mc), 600);
+            }, 1));
+        }
+        scenes.add(new Scene("mphost_docked", mc -> logVessels(mc, "host", 10), 200));
+        scenes.add(new Scene("mphost_undock", mc -> {
+            IntegratedServer server = mc.getSingleplayerServer();
+            server.execute(() -> {
+                var player = server.getPlayerList().getPlayers().stream().filter(p -> !p.getGameProfile().getName().equals("Watcher"))
+                        .findFirst().orElseThrow();
+                com.thepearlking.stevespace.vessel.VesselServer.onAutopilot(player, com.thepearlking.stevespace.vessel.Autopilot.Program.UNDOCK, "", false);
+            });
+            logVessels(mc, "host", 14);
+        }, 300));
+        scenes.add(new Scene("mpwatch_wait", mc -> waitFor(() -> mc.level != null
+                && com.thepearlking.stevespace.world.SpaceDimension.isSpace(mc.level), 20 * 900), 100));
+        for (int i = 1; i <= 25; i++) {
+            scenes.add(new Scene("mpwatch_" + (char) ('a' + i), mc -> {
+                look(mc, 90, 45);
+                logVessels(mc, "watcher", 14);
+            }, 300));
+            scenes.add(new Scene("mpwatch_" + (char) ('a' + i) + "2", mc -> logVessels(mc, "watcher", 14), 300));
+        }
         // The new blocks on a little hull: RCS clusters, a docking port sharing power (red) and one not.
         scenes.add(new Scene("rcs_blocks_go", mc -> {
             command(mc, "gamemode spectator @a");
@@ -2591,6 +2719,58 @@ public final class ClientTest {
         scenes.add(new Scene("sun_orbit_skim_down", mc -> look(mc, 0, 90), 30));
     }
 
+    /** Whether a ship docked in this run (two ports joined in one ship). */
+    private static boolean docked(Minecraft mc) {
+        return com.thepearlking.stevespace.vessel.VesselEntity.serverVessels().stream()
+                .anyMatch(v -> !v.isRemoved() && v.stats() != null && v.stats().ports().size() >= 2);
+    }
+
+    /** Logs every second where this client draws each ship (and the server has it, when it's this client's world). */
+    private static void logVessels(Minecraft mc, String who, int seconds) {
+        new Thread(() -> {
+            for (int i = 0; i < seconds; i++) {
+                try {
+                    Thread.sleep(1000);
+                } catch (InterruptedException ignored) {
+                }
+                mc.execute(() -> {
+                    if (mc.level == null || mc.player == null) {
+                        return;
+                    }
+                    IntegratedServer server = mc.getSingleplayerServer();
+                    StringBuilder line = new StringBuilder("[ClientTest] " + who + " sees");
+                    line.append(String.format(java.util.Locale.ROOT, " | me %.1f %.1f %.1f riding %s", mc.player.getX(), mc.player.getY(),
+                            mc.player.getZ(), mc.player.getVehicle() == null ? "-" : mc.player.getVehicle().getClass().getSimpleName()));
+                    for (var e : mc.level.entitiesForRendering()) {
+                        if (e instanceof com.thepearlking.stevespace.vessel.VesselEntity v) {
+                            var sv = server == null ? null : server.getLevel(com.thepearlking.stevespace.world.SpaceDimension.KEY).getEntity(v.getUUID());
+                            line.append(String.format(java.util.Locale.ROOT, " | %s %.1f %.1f %.1f blocks %b server %s", v.getName().getString(),
+                                    v.getX(), v.getY(), v.getZ(), v.materialized(), sv == null ? "-" : String.format(java.util.Locale.ROOT,
+                                            "%.1f %.1f %.1f", sv.getX(), sv.getY(), sv.getZ())));
+                            if (sv instanceof com.thepearlking.stevespace.vessel.VesselEntity sve && !sve.autopilotStatus().isEmpty()) {
+                                line.append(" autopilot ").append(sve.autopilotDebug());
+                            }
+                        }
+                    }
+                    if (server != null) {
+                        for (var p : server.getPlayerList().getPlayers()) {
+                            var ride = p.getVehicle();
+                            line.append(String.format(java.util.Locale.ROOT, " || server %s at %.1f %.1f %.1f on %s", p.getGameProfile().getName(),
+                                    p.getX(), p.getY(), p.getZ(), ride == null ? "-" : ride.getClass().getSimpleName() + " " + ride.blockPosition()));
+                        }
+                        for (var v : com.thepearlking.stevespace.vessel.VesselEntity.serverVessels()) {
+                            if (!v.isRemoved() && v.orbital() != null) {
+                                line.append(String.format(java.util.Locale.ROOT, " || %s cell %d anchor %s blocks %b crew %d", v.getName().getString(),
+                                        v.orbital().cell(), v.orbital().anchor() == null ? "-" : "yes", v.materialized(), v.getPassengers().size()));
+                            }
+                        }
+                    }
+                    StevesSpace.LOGGER.info(line.toString());
+                });
+            }
+        }, "stevespace-clienttest-vessels").start();
+    }
+
     private static void waitFor(java.util.function.BooleanSupplier condition, int maxTicks) {
         waitCondition = condition;
         conditionTicks = maxTicks;
@@ -2826,6 +3006,22 @@ public final class ClientTest {
                     button.onPress();
                     break;
                 }
+            }
+            return;
+        }
+        String join = System.getenv("STEVESPACE_CLIENTTEST_JOIN");
+        if (join != null && mc.level == null) {
+            // Multiplayer: a second client joining the first one's world (retrying until it's open).
+            if (mc.screen instanceof net.minecraft.client.gui.screens.DisconnectedScreen) {
+                mc.setScreen(new net.minecraft.client.gui.screens.TitleScreen());
+            }
+            if (mc.screen instanceof net.minecraft.client.gui.screens.TitleScreen title && joinRetry-- <= 0) {
+                joinRetry = 100;
+                StevesSpace.LOGGER.info("[ClientTest] joining {}", join);
+                net.minecraft.client.gui.screens.ConnectScreen.startConnecting(title, mc,
+                        net.minecraft.client.multiplayer.resolver.ServerAddress.parseString(join),
+                        new net.minecraft.client.multiplayer.ServerData("test", join, net.minecraft.client.multiplayer.ServerData.Type.OTHER),
+                        false, null);
             }
             return;
         }

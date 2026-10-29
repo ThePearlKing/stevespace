@@ -207,12 +207,12 @@ public final class ClientWeather {
             if (Math.hypot(s.vx(), s.vz()) < 1e-9) {
                 wind = random.nextDouble() * Math.PI * 2;
             }
-            int lobes = 5 + random.nextInt(5);
+            int lobes = 9 + random.nextInt(7);
             for (int k = 0; k < lobes + (s.thunder() ? 2 : 0); k++) {
                 boolean anvil = k >= lobes;
-                double along = anvil ? 0.5 + 0.6 * random.nextDouble() : (random.nextDouble() * 2 - 1) * 0.65;
-                double across = anvil ? (random.nextDouble() * 2 - 1) * 0.2 : (random.nextDouble() * 2 - 1) * 0.45;
-                double size = anvil ? 0.3 + 0.15 * random.nextDouble() : 0.22 + 0.35 * random.nextDouble();
+                double along = anvil ? 0.5 + 0.6 * random.nextDouble() : (random.nextDouble() * 2 - 1) * 0.75;
+                double across = anvil ? (random.nextDouble() * 2 - 1) * 0.2 : (random.nextDouble() * 2 - 1) * 0.55;
+                double size = anvil ? 0.3 + 0.15 * random.nextDouble() : 0.14 + 0.28 * random.nextDouble();
                 double stretch = anvil ? 2.4 : 1 + 0.9 * random.nextDouble();
                 double turn = wind + (random.nextDouble() - 0.5) * 0.8;
                 double weight = anvil ? 0.7 : 0.8 + 0.2 * random.nextDouble();

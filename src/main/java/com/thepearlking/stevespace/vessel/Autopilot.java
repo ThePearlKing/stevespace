@@ -129,9 +129,10 @@ public final class Autopilot {
     /** How the last docking step stood (logs). */
     private String dockDebug = "";
     /** Their port's face last tick (from their centre), and how fast it swings round (a station turning carries its port round). */
-    private DVec3 lastFace;
-    private double lastFaceTime;
-    private DVec3 faceVelocity;
+    /** The spot we're making for, against the other ship's centre, a tick ago (for how fast it moves). */
+    private DVec3 lastArm;
+    private double lastArmTime = Double.NaN;
+    private DVec3 armVelocity;
 
     public Program program() {
         return program;
@@ -758,9 +759,7 @@ public final class Autopilot {
         Ports ports = ports(vessel, target);
         DVec3 goal;
         Quaterniond attitude = null;
-        if (ports != null) {
-            rel = own.velocity().sub(portVelocity(ports.face(), o.time(), other));
-        }
+
         if (ports == null) {
             // Still parked (it wakes up as we come near): close in on it, keeping a little off.
             goal = other.position().add(toOther.length() > 1 ? toOther.normalize().scale(-150) : DVec3.Y.scale(150));
@@ -776,6 +775,8 @@ public final class Autopilot {
                 dockOnAxis = true;
             }
             goal = dockOnAxis ? hold : DockGeometry.around(own.position(), corridor, other.position(), clearance);
+            // Motion against the spot we're making for, which moves round with the station as it turns.
+            rel = own.velocity().sub(spotVelocity(goal, o.time(), other));
             if (dockOnAxis && own.position().sub(hold).length() < 1.5 && rel.length() < 0.15) {
                 phase = Phase.DOCK_ALIGN;
                 return new Command(now.prograde(), 0);
@@ -783,7 +784,8 @@ public final class Autopilot {
         }
         DVec3 toGoal = goal.sub(own.position());
         double distance = toGoal.length();
-        dockDebug = String.format(java.util.Locale.ROOT, "to goal %.1f rel %.2f on axis %b ports %b", distance, rel.length(), dockOnAxis, ports != null);
+        dockDebug = String.format(java.util.Locale.ROOT, "to goal %.1f rel %.2f on axis %b ports %b spin %.3f", distance, rel.length(),
+                dockOnAxis, ports != null, armVelocity == null ? 0 : armVelocity.length());
         // Quick from afar, gently near (and never faster than it can stop).
         double stop = Math.sqrt(2 * Math.max(0.05, vessel.maxAcceleration() * 0.5) * distance);
         double speed = Math.min(Math.min(20, distance / 15), stop);
@@ -830,12 +832,12 @@ public final class Autopilot {
         OrbitalFlight o = vessel.orbital();
         StateVector own = o.state();
         StateVector other = target.state(o.time());
-        // Motion against their port itself (it moves round if the station turns).
-        DVec3 rel = own.velocity().sub(portVelocity(ports.face(), o.time(), other));
         DVec3 dir = ports.direction();
         // Where our port's face is now, against where it should be.
         DVec3 myFace = vessel.portFaceInertial(ports.mine());
         DVec3 spot = ports.face().add(dir.scale(in ? 0 : DOCK_HOLD));
+        // Motion against that spot (it moves round with the station if the station turns).
+        DVec3 rel = own.velocity().sub(spotVelocity(spot, o.time(), other));
         DVec3 error = spot.sub(myFace);
         double along = error.dot(dir);
         DVec3 lateral = error.sub(dir.scale(along));
@@ -865,21 +867,26 @@ public final class Autopilot {
     }
 
     /**
-     * How fast their port's face is moving (fixed space): the ship's own motion, plus how fast
-     * the port swings round it (a station turning with its orbit), measured from last tick.
+     * How fast a spot fixed to the other ship moves (fixed space): its orbit, plus the spot
+     * swinging round as the ship turns (an idle station turns with its orbit, so a spot out in
+     * front of its port moves faster than the port does). Measured from tick to tick, the same
+     * way the spot itself is worked out; a jump (a new spot) starts the measuring again.
      */
-    private DVec3 portVelocity(DVec3 face, double t, StateVector ship) {
-        DVec3 arm = face.sub(ship.position());
-        double dt = t - lastFaceTime;
-        if (lastFace != null && dt > 1e-4 && dt < 2) {
-            DVec3 measured = arm.sub(lastFace).scale(1 / dt);
-            faceVelocity = faceVelocity == null ? measured : faceVelocity.scale(0.8).add(measured.scale(0.2));
-        } else {
-            faceVelocity = null;
+    private DVec3 spotVelocity(DVec3 spot, double t, StateVector centre) {
+        DVec3 arm = spot.sub(centre.position());
+        double dt = t - lastArmTime;
+        if (dt == 0 && armVelocity != null) {
+            return centre.velocity().add(armVelocity);
         }
-        lastFace = arm;
-        lastFaceTime = t;
-        return faceVelocity != null ? ship.velocity().add(faceVelocity) : ship.velocity();
+        if (lastArm != null && dt > 1e-4 && dt < 2 && arm.sub(lastArm).length() < 0.5) {
+            DVec3 measured = arm.sub(lastArm).scale(1 / dt);
+            armVelocity = armVelocity == null ? measured : armVelocity.scale(0.8).add(measured.scale(0.2));
+        } else {
+            armVelocity = null;
+        }
+        lastArm = arm;
+        lastArmTime = t;
+        return armVelocity != null ? centre.velocity().add(armVelocity) : centre.velocity();
     }
 
     private static DVec3 clampLength(DVec3 v, double most) {
