@@ -13,10 +13,21 @@ public final class SpaceNetwork {
 
     public static final SimpleChannel CHANNEL = ChannelBuilder
             .named(ResourceLocation.fromNamespaceAndPath(StevesSpace.MODID, "main"))
-            .networkProtocolVersion(2)
+            .networkProtocolVersion(protocol())
             .simpleChannel();
 
     private SpaceNetwork() {
+    }
+
+    /** Tied to the mod version, so a friend on a different build is told so instead of failing registry sync. */
+    private static int protocol() {
+        String v = net.minecraftforge.fml.ModList.get().getModContainerById(StevesSpace.MODID)
+                .map(c -> c.getModInfo().getVersion().toString()).orElse("0");
+        int n = 0;
+        for (String part : v.split("[^0-9]+")) {
+            if (!part.isEmpty()) n = n * 1000 + Integer.parseInt(part) % 1000;
+        }
+        return n;
     }
 
     public static void register() {
