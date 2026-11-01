@@ -1848,7 +1848,7 @@ public final class SelfTest {
                     var o = v.orbital();
                     StevesSpace.LOGGER.info("[Travel] t={}s {} {} warp={} {} {}", t[0] / 20, o == null ? "-" : o.body().id(),
                             o == null ? "-" : String.format("r=%.0f", o.state().position().length()),
-                            com.thepearlking.stevespace.universe.UniverseClock.get(server).warp(), v.autopilotStatus(), v.autopilotDebug());
+                            com.thepearlking.stevespace.universe.UniverseClock.get(server).warp(), v.autopilotStatus() + " ETA[" + v.autopilotDetail() + "]", v.autopilotDebug());
                 }
                 return t[0] > 200 && !v.autopilotEngaged();
             }, () -> {
@@ -1899,7 +1899,7 @@ public final class SelfTest {
                             o == null ? "-" : o.body().id(),
                             o == null ? "y=" + (int) v.mapY() : "alt=" + (int) o.altitude(),
                             String.format("%.1f", o != null ? o.state().velocity().length() : v.velocity().length()),
-                            com.thepearlking.stevespace.universe.UniverseClock.get(server).warp(), v.autopilotStatus(),
+                            com.thepearlking.stevespace.universe.UniverseClock.get(server).warp(), v.autopilotStatus() + " ETA[" + v.autopilotDetail() + "]",
                             (long) com.thepearlking.stevespace.universe.ServerUniverse.time(server) + " " + v.autopilotDebug());
                 }
                 return pilot[0] != null && t[0] > 200 && !(com.thepearlking.stevespace.vessel.VesselEntity.shipOf(pilot[0]) instanceof com.thepearlking.stevespace.vessel.VesselEntity);

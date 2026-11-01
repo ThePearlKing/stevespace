@@ -174,7 +174,7 @@ public final class Autopilot {
     private static final double ASCENT_REAL = 150;
     private double shownReal = Double.NaN;
     private long shownAt;
-    private int estimateAge = 1000;
+    private long estimatedAt = Long.MIN_VALUE / 2;
     private double lastEstimate = Double.NaN;
 
     /**
@@ -183,12 +183,12 @@ public final class Autopilot {
      */
     private String realLeft(VesselEntity vessel) {
         boolean fresh = false;
-        if (++estimateAge >= 20) {
-            estimateAge = 0;
+        long now = System.nanoTime();
+        if (now - estimatedAt > 1_000_000_000L) { // looked at again once a real second
+            estimatedAt = now;
             lastEstimate = estimateReal(vessel);
             fresh = true;
         }
-        long now = System.nanoTime();
         double est = lastEstimate;
         if (Double.isNaN(est) || est < 0) {
             shownReal = Double.NaN;
@@ -249,7 +249,9 @@ public final class Autopilot {
         var o = vessel.orbital();
         double accel = Math.max(0.05, vessel.maxAcceleration());
         boolean landing = program == Program.LAND || travelling() && landAtEnd;
-        double landReal = landing ? DESCENT_REAL : 0;
+        // (Coming down anywhere is quicker than on a picked spot, which may mean flying across to it.)
+        double descent = hasSite() ? DESCENT_REAL : 60;
+        double landReal = landing ? descent : 0;
         switch (phase) {
             case CLIMB, COAST, CIRCULARIZE -> {
                 if (program == Program.ORBIT || program == Program.CIRCULARIZE) {
@@ -261,11 +263,12 @@ public final class Autopilot {
             case ENTRY, LANDING_BURN, TOUCHDOWN -> {
                 // In the air on the way down (measured in the landing tests): the fall, the last
                 // braking and crossing over to a picked spot.
-                double height = Math.max(0, vessel.mapY() - 64);
+                double height = o != null ? o.altitude() : Math.max(0, vessel.mapY() - 64);
                 CelestialBody here = bodyOf(vessel);
-                double[] want = here == null ? null : siteWant(vessel, here);
+                double[] want = here == null || o != null ? null : siteWant(vessel, here); // (its map place is only right once in the air)
                 double across = want == null || want[2] <= CLOSE_ENOUGH ? 0 : want[2] / 50;
-                return 20 + height * 0.065 + across;
+                // (Higher up, still falling from orbit, it comes down much faster than near the ground.)
+                return 20 + Math.min(height, 1300) * 0.065 + Math.max(0, height - 1300) / 60 + across;
             }
             default -> {
             }
@@ -284,29 +287,33 @@ public final class Autopilot {
         }
         if (program == Program.LAND || phase == Phase.DEORBIT) {
             if (phase == Phase.DEORBIT && !Double.isNaN(deorbitAt)) {
-                return coastReal(deorbitAt - t - 30, false) + 30 + DESCENT_REAL;
+                return coastReal(deorbitAt - t - 30, false) + 30 + descent;
             }
-            return coastReal(period * 0.5, false) + DESCENT_REAL;
+            return coastReal(period * 0.5, false) + descent;
         }
         if (program != Program.TRAVEL && program != Program.MOON) {
             return Double.NaN;
         }
         // One more leg after this one (down to a moon of the planet it's crossing to, say).
         double laterLegs = finalDestination != null && !finalDestination.isEmpty() && !finalDestination.equals(destination) ? 120 : 0;
-        double capture = 40 + 30; // the capture burn and rounding off the orbit
+        // Measured on the Earth to Mars test: the capture burn and settling ~50 s, and the cruise
+        // between the worlds stops for each of its (up to three) course corrections and slows
+        // for the last of the approach.
+        double capture = 50;
+        double helioStops = 40 * Math.max(0, 3 - helioCorrections) + 25;
         switch (phase) {
             case INTER_WAIT, WAIT_BURN -> {
                 if (burnTime > t) {
                     return coastReal(burnTime - t - 30, cruising) + 30 + burnDeltaV / accel
-                            + coastReal(arriveTime - burnTime, true) + capture + laterLegs + landReal;
+                            + coastReal(arriveTime - burnTime, true) + helioStops + capture + laterLegs + landReal;
                 }
             }
             case TRANSFER_BURN -> {
-                return burnDeltaV * 0.5 / accel + coastReal(arriveTime - t, true) + capture + laterLegs + landReal;
+                return burnDeltaV * 0.5 / accel + coastReal(arriveTime - t, true) + helioStops + capture + laterLegs + landReal;
             }
             case HELIO, CRUISE, CORRECTION -> {
                 if (arriveTime > t) {
-                    return coastReal(arriveTime - t, true) + capture + laterLegs + landReal;
+                    return coastReal(arriveTime - t, true) + helioStops + capture + laterLegs + landReal;
                 }
             }
             case ARRIVE, CAPTURE, SETTLE -> {
