@@ -45,11 +45,13 @@ public final class SpaceCrew {
         }
         ParkedShips parked = ParkedShips.get(server);
         for (ServerPlayer player : java.util.List.copyOf(space.players())) {
-            if (player.getVehicle() instanceof VesselEntity) {
+            if (player.getVehicle() instanceof VesselEntity seatedIn) {
+                sendShipOrbit(player, seatedIn); // (for the flight display)
                 continue; // aboard a flying ship: it looks after them
             }
             VesselEntity flying = VesselEntity.shipOf(player, 0);
             if (flying != null) {
+                sendShipOrbit(player, flying);
                 // Inside a ship that is blocks: what you feel is its thrust (and its gravity
                 // generator) pressing you toward the floor; out on its hull you float.
                 ParkedShips.Parked bounds = new ParkedShips.Parked(-1, "", null, 0, "",
@@ -78,12 +80,7 @@ public final class SpaceCrew {
                 if (v.isRemoved() || v.level() != space || ParkedShips.cellAt(v.getX()) != cell) {
                     continue;
                 }
-                if (v.orbital() != null) {
-                    var s = v.orbital().state();
-                    SpaceNetwork.sendTo(player, new CellOrbitS2C(v.orbital().body().id(), v.orbital().time(),
-                            new double[]{s.position().x(), s.position().y(), s.position().z(), s.velocity().x(), s.velocity().y(), s.velocity().z()},
-                            v.getX(), v.getY(), v.getZ()));
-                }
+                sendShipOrbit(player, v);
                 tether(player, v.position()); // (high over a world, in map mode, it's still right there)
                 found = true;
                 break;
@@ -108,6 +105,17 @@ public final class SpaceCrew {
     }
 
     private static final String LOST = "stevespace_lost_in_space";
+
+    /** A flying ship's orbit, for the sky and the flight display of someone aboard or beside it. */
+    private static void sendShipOrbit(ServerPlayer player, VesselEntity v) {
+        if (v.isRemoved() || v.orbital() == null) {
+            return;
+        }
+        var s = v.orbital().state();
+        SpaceNetwork.sendTo(player, new CellOrbitS2C(v.orbital().body().id(), v.orbital().time(),
+                new double[]{s.position().x(), s.position().y(), s.position().z(), s.velocity().x(), s.velocity().y(), s.velocity().z()},
+                v.getX(), v.getY(), v.getZ()));
+    }
 
     /** Floating too far from the ship: a safety line reels you back in (nobody drifts off for good). */
     private static void tether(ServerPlayer player, net.minecraft.world.phys.Vec3 anchor) {

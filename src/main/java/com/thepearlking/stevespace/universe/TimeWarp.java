@@ -18,6 +18,8 @@ public final class TimeWarp {
     public static final int[] LEVELS = {1, 5, 10, 50, 100, 1_000, 10_000, 100_000, 1_000_000, 10_000_000};
     /** Fastest warp near the planets; the two above it are for cruising between them. */
     public static final int NEAR_PLANET_LIMIT = 100_000;
+    /** Fastest warp with the engines firing (like a physics warp): any faster is coasting only. */
+    public static final int BURN_LIMIT = 5;
 
     private TimeWarp() {
     }
@@ -42,6 +44,10 @@ public final class TimeWarp {
         }
         if (next > index) {
             VesselEntity holding = holdingBack(server);
+            // Firing the engines (in space) still allows up to 5x.
+            if (holding != null && LEVELS[next] <= BURN_LIMIT && "stevespace.warp.burning".equals(reason(holding))) {
+                holding = null;
+            }
             if (holding != null) {
                 player.displayClientMessage(Component.translatable(reason(holding), holding.getName()), true);
                 return;

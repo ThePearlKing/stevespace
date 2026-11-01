@@ -152,7 +152,7 @@ public final class Autopilot {
             return phase == Phase.NODE_WAIT ? "T\u2212" + eta(Math.max(0, burnTime - t)) : String.format(java.util.Locale.ROOT, "%.0f m/s", Math.max(0, correctionLeft));
         }
         if (program != Program.TRAVEL && program != Program.MOON) {
-            return "";
+            return realLeft(vessel);
         }
         var system = ServerUniverse.system();
         CelestialBody end = system.body(travelling() ? finalDestination : destination);
@@ -160,15 +160,162 @@ public final class Autopilot {
             return "";
         }
         String text = "\u2192 " + end.displayName();
-        if (vessel.orbital() != null) {
-            double t = vessel.orbital().time();
-            if (phase == Phase.HELIO && arriveTime > t) {
-                text += " \u00b7 " + eta(arriveTime - t);
-            } else if (phase == Phase.INTER_WAIT && burnTime > t) {
-                text += " \u00b7 T\u2212" + eta(burnTime - t);
+        String real = realLeft(vessel);
+        return real.isEmpty() ? text : text + " \u00b7 " + real;
+    }
+
+    // ---------------------------------------------------------------------------------------
+    // How long it will take, in real seconds (the player's clock, time warp included)
+    // ---------------------------------------------------------------------------------------
+
+    /** Measured in the landing tests: from starting down out of orbit to standing on the ground. */
+    private static final double DESCENT_REAL = 110;
+    /** Measured: a launch from the pad up to a settled low orbit. */
+    private static final double ASCENT_REAL = 150;
+    private double shownReal = Double.NaN;
+    private long shownAt;
+    private int estimateAge = 1000;
+    private double lastEstimate = Double.NaN;
+
+    /**
+     * About how long until the autopilot is done, in real seconds: counted down second by second,
+     * and only moved when a fresh estimate is clearly different (so it doesn't jump about).
+     */
+    private String realLeft(VesselEntity vessel) {
+        boolean fresh = false;
+        if (++estimateAge >= 20) {
+            estimateAge = 0;
+            lastEstimate = estimateReal(vessel);
+            fresh = true;
+        }
+        long now = System.nanoTime();
+        double est = lastEstimate;
+        if (Double.isNaN(est) || est < 0) {
+            shownReal = Double.NaN;
+            return "";
+        }
+        if (Double.isNaN(shownReal)) {
+            shownReal = est;
+        } else {
+            shownReal = Math.max(0, shownReal - (now - shownAt) / 1e9);
+            double off = Math.abs(est - shownReal);
+            if (off > Math.max(15, 0.25 * shownReal)) {
+                shownReal = est; // clearly wrong now: take the new figure
+            } else if (fresh) {
+                shownReal += (est - shownReal) * 0.05; // otherwise keep counting down, leaning toward it a little
             }
         }
-        return text;
+        shownAt = now;
+        long sec = Math.round(shownReal);
+        if (sec < 5) {
+            return "almost there";
+        }
+        return sec >= 60 ? String.format(java.util.Locale.ROOT, "about %dm %02ds", sec / 60, sec % 60)
+                : String.format(java.util.Locale.ROOT, "about %ds", sec);
+    }
+
+    /** The real seconds a coast of {@code seconds} (game time) takes, warping the way {@link #warpToward} does. */
+    static double coastReal(double seconds, boolean cruising) {
+        if (!(seconds > 0)) {
+            return 0;
+        }
+        int[] levels = com.thepearlking.stevespace.universe.TimeWarp.LEVELS;
+        int top = 0;
+        for (int i = 0; i < levels.length; i++) {
+            if (levels[i] <= com.thepearlking.stevespace.universe.TimeWarp.NEAR_PLANET_LIMIT || cruising) {
+                top = i;
+            }
+        }
+        double left = seconds;
+        double real = 0;
+        int level = 0;
+        // A second at a time: up one level a second while there's time for it, down as soon as there isn't.
+        for (int n = 0; n < 200_000 && left > 0; n++) {
+            int wanted = 0;
+            for (int i = 0; i <= top; i++) {
+                if (levels[i] <= left) {
+                    wanted = i;
+                }
+            }
+            level = wanted > level ? level + 1 : wanted;
+            double step = Math.min(1, left / levels[level]);
+            left -= levels[level] * step;
+            real += step;
+        }
+        return real;
+    }
+
+    private double estimateReal(VesselEntity vessel) {
+        var o = vessel.orbital();
+        double accel = Math.max(0.05, vessel.maxAcceleration());
+        boolean landing = program == Program.LAND || travelling() && landAtEnd;
+        double landReal = landing ? DESCENT_REAL : 0;
+        switch (phase) {
+            case CLIMB, COAST, CIRCULARIZE -> {
+                if (program == Program.ORBIT || program == Program.CIRCULARIZE) {
+                    double h = o != null ? o.altitude() : vessel.mapY();
+                    double target = Math.max(1, targetAltitude);
+                    return Math.max(10, ASCENT_REAL * (1 - Math.min(1, Math.max(0, h) / target)));
+                }
+            }
+            case ENTRY, LANDING_BURN, TOUCHDOWN -> {
+                // In the air on the way down (measured in the landing tests): the fall, the last
+                // braking and crossing over to a picked spot.
+                double height = Math.max(0, vessel.mapY() - 64);
+                CelestialBody here = bodyOf(vessel);
+                double[] want = here == null ? null : siteWant(vessel, here);
+                double across = want == null || want[2] <= CLOSE_ENOUGH ? 0 : want[2] / 50;
+                return 20 + height * 0.065 + across;
+            }
+            default -> {
+            }
+        }
+        if (o == null) {
+            return Double.NaN;
+        }
+        double t = o.time();
+        double mu = o.body().mu() * SpaceConfig.GRAVITY_SCALE.get();
+        var orbit = o.elements(SpaceConfig.GRAVITY_SCALE.get());
+        double period = orbit.eccentricity() < 1 ? orbit.period(mu) : 0;
+        boolean cruising = o.body().parent() == null;
+        if (program == Program.NODE) {
+            return phase == Phase.NODE_WAIT ? coastReal(burnTime - t - 30, cruising) + 30 + Math.max(0, correctionLeft) / accel
+                    : Math.max(0, correctionLeft) / accel;
+        }
+        if (program == Program.LAND || phase == Phase.DEORBIT) {
+            if (phase == Phase.DEORBIT && !Double.isNaN(deorbitAt)) {
+                return coastReal(deorbitAt - t - 30, false) + 30 + DESCENT_REAL;
+            }
+            return coastReal(period * 0.5, false) + DESCENT_REAL;
+        }
+        if (program != Program.TRAVEL && program != Program.MOON) {
+            return Double.NaN;
+        }
+        // One more leg after this one (down to a moon of the planet it's crossing to, say).
+        double laterLegs = finalDestination != null && !finalDestination.isEmpty() && !finalDestination.equals(destination) ? 120 : 0;
+        double capture = 40 + 30; // the capture burn and rounding off the orbit
+        switch (phase) {
+            case INTER_WAIT, WAIT_BURN -> {
+                if (burnTime > t) {
+                    return coastReal(burnTime - t - 30, cruising) + 30 + burnDeltaV / accel
+                            + coastReal(arriveTime - burnTime, true) + capture + laterLegs + landReal;
+                }
+            }
+            case TRANSFER_BURN -> {
+                return burnDeltaV * 0.5 / accel + coastReal(arriveTime - t, true) + capture + laterLegs + landReal;
+            }
+            case HELIO, CRUISE, CORRECTION -> {
+                if (arriveTime > t) {
+                    return coastReal(arriveTime - t, true) + capture + laterLegs + landReal;
+                }
+            }
+            case ARRIVE, CAPTURE, SETTLE -> {
+                return capture + laterLegs + landReal;
+            }
+            default -> {
+            }
+        }
+        return Double.NaN; // still working out the route
     }
 
     private static String eta(double seconds) {
@@ -210,6 +357,11 @@ public final class Autopilot {
     }
 
     /** A short status word for the HUD (translation key). */
+    /** On the last part of the way down (braking, touching down). */
+    public boolean comingDown() {
+        return phase == Phase.LANDING_BURN || phase == Phase.TOUCHDOWN;
+    }
+
     public String statusKey() {
         if (program == Program.NODE && phase == Phase.CORRECTION) {
             return "hud.stevespace.autopilot.node_burn";
@@ -2206,12 +2358,12 @@ public final class Autopilot {
         dx -= Math.round(dx / width) * width;
         double dz = geometry.zForLatitude(siteLat) - vessel.mapZ();
         double distance = Math.hypot(dx, dz);
-        if (distance < 3) {
-            return new double[]{0, 0, distance};
+        if (distance < CLOSE_ENOUGH) {
+            return new double[]{0, 0, distance}; // near enough: land where it is
         }
         // Gently: the engines take a moment to turn and spool, so plan on only a little of their push.
-        double accel = Math.max(0.1, vessel.maxAcceleration() * 0.1);
-        double speed = Math.min(40, Math.sqrt(2 * accel * distance) * 0.8);
+        double accel = Math.max(0.1, vessel.maxAcceleration() * 0.25);
+        double speed = Math.min(80, Math.sqrt(2 * accel * distance) * 0.8);
         return new double[]{dx / distance * speed, dz / distance * speed, distance};
     }
 
@@ -2325,7 +2477,7 @@ public final class Autopilot {
         double[] want = siteWant(vessel, body);
         if (!body.hasAtmosphere() || body.atmosphere().density() < 0.1 || thinAir(body, height) && v.y() > -3
                 || phase == Phase.LANDING_BURN && thinAir(body, height)
-                || want != null && want[2] > 30 && height < 400 && speed < 150) {
+                || want != null && want[2] > CLOSE_ENOUGH && height < 400 && speed < 150) {
             // (Also low down with a picked spot still off to one side: flown there under power.)
             if (want != null && !loggedArrival) {
                 loggedArrival = true;
@@ -2446,6 +2598,10 @@ public final class Autopilot {
     private String lastDescent = "";
     /** How high (blocks) a ship flies across to a picked spot before coming straight down on it. */
     private static final double CRUISE_HEIGHT = 160;
+    /** Landing this close to the picked spot is fine: it isn't meant to be block-precise. */
+    private static final double CLOSE_ENOUGH = 10;
+    /** Lowest a ship flies across to the spot; it only climbs back up near the ground, to clear hills. */
+    private static final double FLY_OVER_FLOOR = 40;
 
     private Command airlessDescent(VesselEntity vessel, double height, DVec3 v, double gravity, double[] want) {
         double max = Math.max(0.1, vessel.maxAcceleration());
@@ -2456,21 +2612,34 @@ public final class Autopilot {
         if (height < 6) {
             target = -1.5;
         }
-        // A picked spot still well off to one side: fly over to it at a safe height first (never
-        // falling faster than a few metres a second meanwhile), and only then come straight down.
-        boolean away = want != null && want[2] > 30;
+        // A picked spot still well off to one side: come down to the crossing height (or hold
+        // height if already below it; it only climbs close to the ground), fly over, and only
+        // then come straight down.
+        boolean away = want != null && want[2] > CLOSE_ENOUGH;
         if (away) {
-            target = height > CRUISE_HEIGHT ? Math.max(target, -4) : Math.min(6, (CRUISE_HEIGHT - height) * 0.2);
+            if (height > CRUISE_HEIGHT) {
+                // High up: come down at the usual rate, but braking to stop at the crossing height
+                // (as if the ground were there), not at the real ground.
+                double aboveCruise = Math.max(0, height - CRUISE_HEIGHT + Math.min(0, v.y()) * 1.5 - 4);
+                target = Math.max(target, -Math.min(50, Math.sqrt(2 * brake * aboveCruise) + 1.5));
+            } else if (height > FLY_OVER_FLOOR) {
+                target = Math.max(target, 0);
+            } else {
+                target = Math.min(3, (FLY_OVER_FLOOR - height) * 0.2);
+            }
         }
         phase = height < 25 ? Phase.TOUCHDOWN : Phase.LANDING_BURN;
         double wantX = want == null ? 0 : want[0];
         double wantZ = want == null ? 0 : want[1];
         double sidewaysNow = Math.sqrt(v.x() * v.x() + v.z() * v.z());
         // On a world with hardly any pull (Charon, an asteroid) falling would take ages: far above
-        // the ground, push gently downward to get going, at most 15 m/s. It turns back upright
+        // the ground, push downward to get going, at most 30 m/s (half the safe speed). It turns back upright
         // while coasting, long before the braking starts.
-        double dive = -Math.min(15, -target * 0.3);
-        if (!away && height > 300 && sidewaysNow < 3 && v.y() > dive + 1 && gravity < 1.0) {
+        // (Faster only once down in the world: while still in space a tiny world's hand-over
+        // comes low, the engines starting again from cold.)
+        boolean inWorld = vessel.orbital() == null;
+        double dive = inWorld ? -Math.min(30, -target * 0.5) : -Math.min(15, -target * 0.3);
+        if (!away && height > (inWorld ? 100 : 300) && sidewaysNow < 3 && v.y() > dive + 1 && gravity < 1.0) {
             DVec3 down = new DVec3(-v.x() * 0.05, -1, -v.z() * 0.05).normalize();
             double push = Math.min(max * 0.5, (v.y() - dive) * 1.0);
             lastDescent = String.format(java.util.Locale.ROOT, "h=%.0f diving to %.1f v.y=%.1f", height, dive, v.y());
@@ -2496,7 +2665,8 @@ public final class Autopilot {
         DVec3 direction = new DVec3(ax, up, az).scale(1 / total);
         // Low down it stays nearly upright (no big turn near the ground); high up, with nothing to
         // hold back, it may lie over to take the sideways drift off without lifting itself up.
-        double floor = height < 150 ? 0.75 : (up > 0.05 * max ? 0.3 : -1);
+        // (Crossing over to a picked spot it may tilt down to the crossing floor: it holds its height there.)
+        double floor = height < (away ? FLY_OVER_FLOOR : 150) ? 0.75 : (up > 0.05 * max ? 0.3 : -1);
         if (direction.y() < floor) {
             double flat = Math.sqrt(Math.max(1e-9, direction.x() * direction.x() + direction.z() * direction.z()));
             double side2 = Math.sqrt(1 - floor * floor);

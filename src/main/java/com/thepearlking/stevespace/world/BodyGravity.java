@@ -20,6 +20,7 @@ public final class BodyGravity {
 
     private static final ResourceLocation GRAVITY = ResourceLocation.fromNamespaceAndPath(StevesSpace.MODID, "body_gravity");
     private static final ResourceLocation FALL = ResourceLocation.fromNamespaceAndPath(StevesSpace.MODID, "body_fall_damage");
+    private static final ResourceLocation SAFE_FALL = ResourceLocation.fromNamespaceAndPath(StevesSpace.MODID, "body_safe_fall");
 
     private BodyGravity() {
     }
@@ -36,15 +37,17 @@ public final class BodyGravity {
         } else if (body != null && body.isLandable()) {
             ratio = body.surfaceGravity() / com.thepearlking.stevespace.universe.SolarSystem.EARTH_GRAVITY;
         }
-        apply(living.getAttribute(Attributes.GRAVITY), GRAVITY, ratio);
-        // A fall hurts in proportion to the impact energy, which goes with gravity.
-        apply(living.getAttribute(Attributes.FALL_DAMAGE_MULTIPLIER), FALL, ratio);
+        set(living, ratio);
     }
 
     /** Sets someone's gravity (and fall damage) to {@code ratio} of Earth's. */
     public static void set(LivingEntity living, double ratio) {
         apply(living.getAttribute(Attributes.GRAVITY), GRAVITY, ratio);
+        // A fall hurts in proportion to the impact energy, which goes with gravity: so the
+        // height that's safe to fall grows as gravity drops (3 blocks on Earth is 3 / ratio here),
+        // and each block beyond it hurts that much less.
         apply(living.getAttribute(Attributes.FALL_DAMAGE_MULTIPLIER), FALL, ratio);
+        apply(living.getAttribute(Attributes.SAFE_FALL_DISTANCE), SAFE_FALL, ratio < 1e-3 ? 1e6 : 1 / ratio);
     }
 
     private static void apply(AttributeInstance attribute, ResourceLocation id, double ratio) {

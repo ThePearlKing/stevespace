@@ -273,12 +273,11 @@ public final class SkyRenderer {
         }
         // Far to near, so a moon passing in front of the Sun covers it (eclipses).
         visible.sort(Comparator.comparingDouble(Visible::distance).reversed());
-        // Through a telescope, bodies show their real size (no artistic scaling), and smaller
-        // ones become discs once they are big enough on screen. Zooming in always makes one
-        // bigger, though: the naked eye's enlargement fades out gradually (with the square root
-        // of the zoom), so it keeps growing on screen until it's at its true size.
+        // Through a telescope, bodies show their real size (no artistic scaling, so they grow
+        // with the stars around them as it zooms), and smaller ones become discs once they are
+        // big enough on screen.
         double magnification = com.thepearlking.stevespace.client.TelescopeView.magnification();
-        double scale = Math.max(1, ClientConfig.sunMoonScale() / Math.sqrt(magnification));
+        double scale = magnification > 1.0001 ? 1 : ClientConfig.sunMoonScale();
         for (Visible v : visible) {
             double angularRadius = Math.asin(Math.min(1, v.body().radius() / v.distance()));
             if (v.body() == s.system().sun()) {

@@ -74,6 +74,8 @@ public final class StevesSpace {
         MinecraftForge.EVENT_BUS.register(com.thepearlking.stevespace.vessel.SpaceCrew.class);
         MinecraftForge.EVENT_BUS.register(com.thepearlking.stevespace.command.SpaceCommands.class);
         MinecraftForge.EVENT_BUS.register(com.thepearlking.stevespace.world.Landmarks.class);
+        MinecraftForge.EVENT_BUS.register(com.thepearlking.stevespace.world.BuiltScan.class);
+        MinecraftForge.EVENT_BUS.register(com.thepearlking.stevespace.world.LooseGravity.class);
         MinecraftForge.EVENT_BUS.register(com.thepearlking.stevespace.world.WeatherSystems.class);
         MinecraftForge.EVENT_BUS.register(com.thepearlking.stevespace.world.AcheronEvent.class);
         MinecraftForge.EVENT_BUS.register(com.thepearlking.stevespace.vessel.PlacedBlocks.class);

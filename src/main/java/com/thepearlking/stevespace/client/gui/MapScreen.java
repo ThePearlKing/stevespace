@@ -383,6 +383,24 @@ public class MapScreen extends Screen {
         return height - 66;
     }
 
+    /**
+     * The flight panel (navball, throttle, SAS) is drawn shrunk toward the bottom middle of the
+     * screen, so it doesn't cover the map: about 60% of its old size, less on a small window.
+     */
+    private int lastMouseX;
+    private int lastMouseY;
+
+    private float flightScale() {
+        float fit = Math.min(0.36f * width / 336f, 0.24f * height / 130f);
+        return Math.max(0.4f, Math.min(0.62f, fit));
+    }
+
+    /** A point on screen, in the flight panel's own (unshrunk) coordinates. */
+    private double[] intoFlight(double x, double y) {
+        float s = flightScale();
+        return new double[]{navX() + (x - navX()) / s, height + (y - height) / s};
+    }
+
     private void addFlightWidgets() {
         nodeButtons.clear();
         sasButtons.clear();
@@ -423,9 +441,9 @@ public class MapScreen extends Screen {
         int sy = navY() - 46;
         for (int i = 0; i < modes.length; i++) {
             VesselEntity.Sas mode = modes[i];
-            sasButtons.add(addRenderableWidget(net.minecraft.client.gui.components.Button.builder(sasLabel(mode, false),
+            sasButtons.add(net.minecraft.client.gui.components.Button.builder(sasLabel(mode, false),
                     b -> com.thepearlking.stevespace.network.SpaceNetwork.sendToServer(new com.thepearlking.stevespace.network.SasC2S(mode.ordinal())))
-                    .bounds(sx + (i % 2) * 52, sy + (i / 2) * 18, 50, 16).build()));
+                    .bounds(sx + (i % 2) * 52, sy + (i / 2) * 18, 50, 16).build());
         }
         updateFlightWidgets();
     }
@@ -630,6 +648,17 @@ public class MapScreen extends Screen {
         }
         pressX = mouseX;
         pressY = mouseY;
+        if (button == 0) {
+            double[] m = intoFlight(mouseX, mouseY);
+            for (var b : sasButtons) {
+                if (b.visible && b.active && b.isMouseOver(m[0], m[1])) {
+                    b.onPress();
+                    b.playDownSound(minecraft.getSoundManager());
+                    pressHandled = true;
+                    return true;
+                }
+            }
+        }
         pressHandled = super.mouseClicked(mouseX, mouseY, button);
         return true;
     }
@@ -1183,6 +1212,8 @@ public class MapScreen extends Screen {
 
     @Override
     public void render(GuiGraphics g, int mouseX, int mouseY, float partialTick) {
+        lastMouseX = mouseX;
+        lastMouseY = mouseY;
         SolarSystem system = ClientUniverse.system();
         double t = ClientUniverse.time();
         cx = width / 2f;
@@ -1394,6 +1425,20 @@ public class MapScreen extends Screen {
         }
         int nx = navX();
         int ny = navY();
+        float scale = flightScale();
+        g.pose().pushPose();
+        g.pose().translate(nx, height, 0);
+        g.pose().scale(scale, scale, 1);
+        g.pose().translate(-nx, -height, 0);
+        try {
+            drawFlightPanel(g, vessel, nx, ny, partialTick);
+        } finally {
+            g.pose().popPose();
+        }
+        drawNodePanel(g, vessel, t);
+    }
+
+    private void drawFlightPanel(GuiGraphics g, VesselEntity vessel, int nx, int ny, float partialTick) {
         g.fill(nx - 168, ny - 58, nx + 168, height - 4, PANEL);
         g.renderOutline(nx - 168, ny - 58, 336, height - 4 - (ny - 58), PANEL_EDGE);
         Navball.draw(g, font, vessel, Navball.frame(vessel, nodeDirection), nx, ny, 46, partialTick);
@@ -1426,7 +1471,13 @@ public class MapScreen extends Screen {
             g.drawString(font, line, rx, ky, GREEN_DIM, false);
             ky += 10;
         }
+        double[] m = intoFlight(lastMouseX, lastMouseY);
+        for (var b : sasButtons) {
+            b.render(g, (int) m[0], (int) m[1], partialTick);
+        }
+    }
 
+    private void drawNodePanel(GuiGraphics g, VesselEntity vessel, double t) {
         // The node panel.
         if (!hasNode() || !ClientSpace.orbitActive()) {
             if (ClientSpace.orbitActive()) {
@@ -1586,7 +1637,7 @@ public class MapScreen extends Screen {
         // Bottom left, wrapped to leave room for the flight panel when it's there.
         Component help = Component.translatable("screen.stevespace.map.help", FlightKeys.MAP.getTranslatedKeyMessage());
         VesselEntity flying = piloted();
-        int room = flying != null && !flying.isGrounded() ? navX() - 168 - 16 : width - 16;
+        int room = flying != null && !flying.isGrounded() ? navX() - Math.round(168 * flightScale()) - 16 : width - 16;
         var lines = font.split(help, Math.max(80, room));
         int hy = height - 6 - lines.size() * 10;
         for (var line : lines) {

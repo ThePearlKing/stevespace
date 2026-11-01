@@ -120,7 +120,7 @@ public final class VesselServer {
         }
     }
 
-    private static VesselEntity tryLaunch(ServerPlayer player, BlockPos seatPos, VesselControls controls) {
+    public static VesselEntity tryLaunch(ServerPlayer player, BlockPos seatPos, VesselControls controls) {
         ServerLevel level = player.serverLevel();
         if (!(level.getBlockState(seatPos).getBlock() instanceof PilotSeatBlock)) {
             return null;
@@ -177,6 +177,33 @@ public final class VesselServer {
                 if (other != player && !crew.contains(other) && other.getVehicle() == null && vessel.standsIn(other, seatPos)) {
                     vessel.takeAboardStanding(other, seatPos);
                 }
+            }
+            // Animals inside come along too, standing where they are.
+            net.minecraft.world.phys.AABB around = vessel.getBoundingBox().inflate(48);
+            java.util.Set<net.minecraft.world.entity.Entity> taken = new java.util.HashSet<>();
+            for (net.minecraft.world.entity.Entity animal : level.getEntities((net.minecraft.world.entity.Entity) null, around,
+                    e -> VesselEntity.carriesAlong(e) && e.getVehicle() == null && vessel.carries(e, seatPos))) {
+                vessel.takeAnimal(animal, seatPos); // (on a lead to one of the ship's fences too)
+                taken.add(animal);
+            }
+            // And the crew's pets that follow them (tamed, not told to sit), from anywhere near.
+            java.util.List<ServerPlayer> aboard = new java.util.ArrayList<>(crew);
+            aboard.add(player);
+            com.thepearlking.stevespace.StevesSpace.LOGGER.info("pets near {}: {}", vessel.getBoundingBox(), level.getEntitiesOfClass(
+                    net.minecraft.world.entity.TamableAnimal.class, vessel.getBoundingBox().inflate(64), t -> true).stream()
+                    .map(t -> t + " tame=" + t.isTame() + " sit=" + t.isOrderedToSit() + " leash=" + t.isLeashed() + " veh=" + t.getVehicle() + " owner=" + t.getOwnerUUID()).toList());
+            for (net.minecraft.world.entity.TamableAnimal pet : level.getEntitiesOfClass(net.minecraft.world.entity.TamableAnimal.class,
+                    vessel.getBoundingBox().inflate(64),
+                    t -> t.isTame() && !t.isOrderedToSit() && !t.isLeashed() && t.getVehicle() == null && t.isAlive() && !taken.contains(t))) {
+                for (ServerPlayer owner : aboard) {
+                    if (owner.getUUID().equals(pet.getOwnerUUID())) {
+                        vessel.takePetAboard(pet, owner);
+                        break;
+                    }
+                }
+            }
+            if (!vessel.getPassengers().isEmpty()) {
+                com.thepearlking.stevespace.StevesSpace.LOGGER.info("{} lifts off with {}", vessel.getName().getString(), vessel.getPassengers());
             }
         }
         return vessel;

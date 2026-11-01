@@ -264,7 +264,7 @@ public final class TelescopeView {
         if (!active()) {
             return;
         }
-        if (mc.player == null || mc.player.distanceToSqr(telescope.getCenter()) > 9
+        if (mc.player == null || !mc.player.canInteractWithBlock(telescope, 1.0) // (as far as it can be reached, and a little)
                 || !(mc.player.level().getBlockState(telescope).getBlock() instanceof com.thepearlking.stevespace.block.TelescopeBlock)) {
             stop();
             return;

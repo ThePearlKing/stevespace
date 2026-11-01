@@ -134,6 +134,12 @@ public class VesselEntity extends Entity implements IEntityAdditionalSpawnData {
     private VesselControls pilotControls = VesselControls.IDLE;
     private final CabinCrew crew = new CabinCrew();
     private boolean crewDirty;
+    /** Animals on a lead tied to one of the ship's fences: the fence (ship block coordinates), to tie them up again on arrival. */
+    private final Map<java.util.UUID, BlockPos> tethers = new java.util.HashMap<>();
+    /** The attitude being held is for coming down: turned to at the usual rate. */
+    private boolean steerQuick;
+    /** Ticks the autopilot has wanted a burn with no propellant. */
+    private int dryTicks;
     /** Ships docked together into this one: who each of them is (empty when it's just one ship). */
     private List<DockedMembers.Member> members = new ArrayList<>();
     /** Ticks each crew record has had nobody aboard to match it (dropped after a while). */
@@ -399,6 +405,13 @@ public class VesselEntity extends Entity implements IEntityAdditionalSpawnData {
         if (tag.contains("lever")) {
             pilotControls = new VesselControls(tag.getDouble("lever"), 0, 0, 0);
         }
+        tethers.clear();
+        for (net.minecraft.nbt.Tag t : tag.getList("tethers", net.minecraft.nbt.Tag.TAG_COMPOUND)) {
+            CompoundTag c = (CompoundTag) t;
+            if (c.hasUUID("id")) {
+                tethers.put(c.getUUID("id"), new BlockPos(c.getInt("x"), c.getInt("y"), c.getInt("z")));
+            }
+        }
         if (tag.contains("crew")) {
             CabinCrew loaded = CabinCrew.load(tag.getCompound("crew"));
             for (java.util.UUID id : loaded.everyone()) {
@@ -442,6 +455,18 @@ public class VesselEntity extends Entity implements IEntityAdditionalSpawnData {
             tag.put("autopilot", autopilot.save());
         }
         tag.put("crew", crew.save());
+        if (!tethers.isEmpty()) {
+            net.minecraft.nbt.ListTag list = new net.minecraft.nbt.ListTag();
+            tethers.forEach((id, pos) -> {
+                CompoundTag t = new CompoundTag();
+                t.putUUID("id", id);
+                t.putInt("x", pos.getX());
+                t.putInt("y", pos.getY());
+                t.putInt("z", pos.getZ());
+                list.add(t);
+            });
+            tag.put("tethers", list);
+        }
         tag.putDouble("lever", pilotControls.throttle()); // the throttle as the pilot left it
         if (owner != null) {
             tag.putUUID("owner", owner);
@@ -854,23 +879,23 @@ public class VesselEntity extends Entity implements IEntityAdditionalSpawnData {
 
     /** Out of the seat and onto your feet beside it, inside the flying ship. */
     private void standUp(Player player) {
-        int seat = crew.seatOf(player.getUUID());
-        BlockPos at = seat >= 0 && seat < stats.seats().size() ? stats.seats().get(seat).pos() : BlockPos.ZERO;
-        BlockPos spot = null;
-        for (Direction d : new Direction[]{Direction.NORTH, Direction.SOUTH, Direction.EAST, Direction.WEST}) {
-            BlockPos feet = at.relative(d);
-            if (open(feet) && open(feet.above())) {
-                spot = feet;
-                break;
-            }
-        }
-        if (spot == null) {
-            spot = open(at.above()) && open(at.above(2)) ? at.above() : at;
-        }
+        BlockPos spot = besideSeat(crew.seatOf(player.getUUID()));
         crew.walk(player.getUUID(), new Vector3d(spot.getX() + 0.5, spot.getY() + 0.01, spot.getZ() + 0.5));
         crewDirty = true;
         player.displayClientMessage(net.minecraft.network.chat.Component.translatable("stevespace.vessel.walking",
                 net.minecraft.network.chat.Component.keybind("key.stevespace.leave_seat")), true);
+    }
+
+    /** A free place to stand next to a seat (ship block coordinates). */
+    private BlockPos besideSeat(int seat) {
+        BlockPos at = seat >= 0 && seat < stats.seats().size() ? stats.seats().get(seat).pos() : BlockPos.ZERO;
+        for (Direction d : new Direction[]{Direction.NORTH, Direction.SOUTH, Direction.EAST, Direction.WEST}) {
+            BlockPos feet = at.relative(d);
+            if (open(feet) && open(feet.above())) {
+                return feet;
+            }
+        }
+        return open(at.above()) && open(at.above(2)) ? at.above() : at;
     }
 
     /** Back into the nearest free seat (anywhere in the ship). */
@@ -995,9 +1020,24 @@ public class VesselEntity extends Entity implements IEntityAdditionalSpawnData {
                     aboard.displayClientMessage(net.minecraft.network.chat.Component.translatable(autopilot.failureKey()), true);
                     autopilot.stop();
                 }
+                // Wanting a burn with nothing to burn: say so and let go (rather than hold time at
+                // normal speed forever, waiting for a burn that can't happen).
+                if (command != null && command.throttle() > 0 && propellant <= 0 && !creativeFuel(pilot)) {
+                    if (++dryTicks > 100) {
+                        dryTicks = 0;
+                        aboard.displayClientMessage(net.minecraft.network.chat.Component.translatable("stevespace.autopilot.no_propellant"), false);
+                        autopilot.stop();
+                        command = null;
+                    }
+                } else {
+                    dryTicks = 0;
+                }
                 if (command != null) {
                     steerTarget = command.direction();
                     steerAttitude = command.attitude();
+                    // Coming down: also spin back (about the engines' axis, never moving where they
+                    // point) to the heading it took off with, so it lands the way it was built.
+                    steerQuick = steerAttitude == null && autopilot.comingDown();
                     rcsWanted = command.translate();
                     double aligned = alignment(command.direction());
                     // Only fire once roughly pointing the right way.
@@ -1172,6 +1212,15 @@ public class VesselEntity extends Entity implements IEntityAdditionalSpawnData {
     }
 
     /** Anyone aboard: the pilot if seated, otherwise the first player aboard. */
+    /**
+     * Creative's free fuel: whoever's aboard (in the seat or up and walking about, the autopilot
+     * flying) is in creative mode.
+     */
+    private boolean creativeFuel(Player pilot) {
+        Player who = pilot != null ? pilot : commander();
+        return who != null && who.getAbilities().instabuild && SpaceConfig.CREATIVE_INFINITE_FUEL.get();
+    }
+
     public Player commander() {
         Player pilot = pilot();
         if (pilot != null) {
@@ -1220,7 +1269,7 @@ public class VesselEntity extends Entity implements IEntityAdditionalSpawnData {
         }
         ServerLevel level = (ServerLevel) level();
         CelestialBody body = flightBody();
-        boolean infiniteFuel = pilot != null && pilot.getAbilities().instabuild && SpaceConfig.CREATIVE_INFINITE_FUEL.get();
+        boolean infiniteFuel = creativeFuel(pilot);
         double throttle = spool((propellant > 0 || infiniteFuel) ? controls.throttle() : 0);
 
         // --- Forces ---------------------------------------------------------------------------
@@ -1386,12 +1435,13 @@ public class VesselEntity extends Entity implements IEntityAdditionalSpawnData {
         var server = level.getServer();
         var clock = com.thepearlking.stevespace.universe.UniverseClock.get(server);
         double gravityScale = SpaceConfig.GRAVITY_SCALE.get();
-        boolean infiniteFuel = pilot != null && pilot.getAbilities().instabuild && SpaceConfig.CREATIVE_INFINITE_FUEL.get();
-        // Burning only happens at normal time speed; time warp is coasting only.
-        if (clock.warp() > 1 && (controls.throttle() > 0 || controls.translating())) {
-            com.thepearlking.stevespace.universe.TimeWarp.stop(server); // firing the engines ends warp
+        boolean infiniteFuel = creativeFuel(pilot);
+        // Burning happens at up to 5x time; faster warp is coasting only (firing drops it to 5x).
+        double burnWarp = com.thepearlking.stevespace.universe.TimeWarp.BURN_LIMIT;
+        if (clock.warp() > burnWarp && (controls.throttle() > 0 || controls.translating())) {
+            com.thepearlking.stevespace.universe.ServerUniverse.setWarp(server, burnWarp);
         }
-        boolean warping = clock.warp() > 1;
+        boolean warping = clock.warp() > burnWarp;
         if (warping) {
             engineLevel = 0; // time warp is coasting only: the engines are off, not winding down
         }
@@ -1408,7 +1458,7 @@ public class VesselEntity extends Entity implements IEntityAdditionalSpawnData {
                     flow += engine.thrust() * SpaceConfig.THRUST_SCALE.get()
                             / (engine.exhaustVelocity() * SpaceConfig.FUEL_EFFICIENCY.get());
                 }
-                propellant = Math.max(0, propellant - flow * throttle * TICK);
+                propellant = Math.max(0, propellant - flow * throttle * TICK * Math.max(1, clock.warp()));
             }
         }
         entityData.set(THROTTLE, (float) throttle);
@@ -1559,7 +1609,8 @@ public class VesselEntity extends Entity implements IEntityAdditionalSpawnData {
         Vector3d target = new Vector3d();
         if (steerAttitude != null && !isGrounded()) {
             // Autopilot holding a whole attitude (lining a docking port up, square to the other's):
-            // turning gently, so nothing seems to swing round all at once.
+            // turning gently, so nothing seems to swing round all at once (but at the usual rate
+            // coming down, where the engines' pointing matters).
             rate = Math.min(rate, Math.toRadians(8));
             Quaterniond error = new Quaterniond(orientation).conjugate().mul(steerAttitude).normalize();
             if (error.w < 0) {
@@ -1586,6 +1637,19 @@ public class VesselEntity extends Entity implements IEntityAdditionalSpawnData {
                 axis.normalize();
                 new Quaterniond(orientation).conjugate().transform(axis); // into the vessel's own frame
                 target.set(axis).mul(Math.min(rate, angle * 2.5));
+            }
+            if (steerQuick) {
+                // The twist about the engines' axis away from the heading it was built with (the
+                // turn that brings the thrust axis to where it points now, with no spin about it).
+                Vector3d own = new Vector3d(stats.thrustVector());
+                if (own.lengthSquared() > 1e-12) {
+                    own.normalize();
+                    Quaterniond plain = new Quaterniond().rotationTo(own, current);
+                    Quaterniond twist = new Quaterniond(plain).conjugate().mul(orientation).normalize();
+                    double spin = 2 * Math.atan2(twist.x * own.x + twist.y * own.y + twist.z * own.z, twist.w);
+                    spin = Math.atan2(Math.sin(spin), Math.cos(spin)); // the short way round
+                    target.add(new Vector3d(own).mul(-Math.signum(spin) * Math.min(rate * 0.5, Math.abs(spin) * 1.5)));
+                }
             }
         } else if (pilot != null && !isGrounded()) {
             // Input axes are relative to the pilot's seat: forward = where the seat faces.
@@ -2343,6 +2407,7 @@ public class VesselEntity extends Entity implements IEntityAdditionalSpawnData {
     public void land() {
         ServerLevel level = (ServerLevel) level();
         Rotation rotation = nearestUprightRotation();
+        com.thepearlking.stevespace.StevesSpace.LOGGER.info("{} touched down turned {}", getName().getString(), rotation);
         // Block p lands at origin + rotate(p). Its centre is at p + 0.5 in vessel coordinates and
         // at position + rotate(p + 0.5 - com) in the world, so the origin that matches is
         // position - rotate(com) + rotate(half) - half (rotating a block's corner is not the same
@@ -2554,6 +2619,16 @@ public class VesselEntity extends Entity implements IEntityAdditionalSpawnData {
         refreshFromBlocks(level);
         BlockPos origin = blockOrigin();
         List<Player> aboard = playersAboard(landing ? 8 : 1.5);
+        List<Entity> animals = animalsAboard(landing ? 2 : 0.5);
+        for (Entity animal : animals) {
+            BlockPos fence = tiedAt(animal);
+            if (fence != null && structure.blocks().containsKey(fence.subtract(origin))) {
+                tethers.put(animal.getUUID(), fence.subtract(origin));
+                ((net.minecraft.world.entity.Leashable) animal).dropLeash(true, false);
+            }
+            standHere(animal, origin);
+            animal.fallDistance = 0;
+        }
         List<VesselStats.Seat> seats = stats.seats();
         for (Player player : aboard) {
             int seat = -1;
@@ -2579,11 +2654,14 @@ public class VesselEntity extends Entity implements IEntityAdditionalSpawnData {
             leaveGroundSeat(player);
             player.startRiding(this, true);
         }
+        for (Entity animal : animals) {
+            animal.startRiding(this, true);
+        }
         crewDirty = true;
     }
 
     /** Crew on their feet: where they stand, relative to the ship's blocks (kept inside its bounds). */
-    private void standHere(Player player, BlockPos origin) {
+    private void standHere(Entity player, BlockPos origin) {
         crew.remove(player.getUUID());
         double x = Math.max(boundsMin.getX(), Math.min(boundsMax.getX() + 1, player.getX() - origin.getX()));
         double y = Math.max(boundsMin.getY(), Math.min(boundsMax.getY() + 1, player.getY() - origin.getY()));
@@ -2592,7 +2670,7 @@ public class VesselEntity extends Entity implements IEntityAdditionalSpawnData {
     }
 
     /** True if the player stands among the blocks of this ship as it was at {@code origin} (lift-off). */
-    public boolean standsIn(Player player, BlockPos origin) {
+    public boolean standsIn(Entity player, BlockPos origin) {
         double x = player.getX() - origin.getX();
         double y = player.getY() - origin.getY();
         double z = player.getZ() - origin.getZ();
@@ -2638,7 +2716,7 @@ public class VesselEntity extends Entity implements IEntityAdditionalSpawnData {
     }
 
     /** Someone on their feet in the ship as it lifts off: they come along standing where they are. */
-    public void takeAboardStanding(Player player, BlockPos origin) {
+    public void takeAboardStanding(Entity player, BlockPos origin) {
         standHere(player, origin);
         player.fallDistance = 0;
         leaveGroundSeat(player);
@@ -2726,6 +2804,13 @@ public class VesselEntity extends Entity implements IEntityAdditionalSpawnData {
             } else {
                 rider.teleportTo(getX(), getY() + stats.radius(), getZ());
             }
+            BlockPos fence = tethers.remove(rider.getUUID());
+            if (fence != null && rider instanceof net.minecraft.world.entity.Leashable leashable) {
+                BlockPos at = origin.offset(fence.rotate(rotation));
+                if (level.getBlockState(at).is(net.minecraft.tags.BlockTags.FENCES)) {
+                    leashable.setLeashedTo(net.minecraft.world.entity.decoration.LeashFenceKnotEntity.getOrCreateKnot(level, at), true);
+                }
+            }
         }
     }
 
@@ -2753,7 +2838,64 @@ public class VesselEntity extends Entity implements IEntityAdditionalSpawnData {
 
     @Override
     protected boolean canAddPassenger(Entity passenger) {
+        if (carriesAlong(passenger)) {
+            return crew().knows(passenger.getUUID()); // animals: aboard standing (never in a seat)
+        }
         return passenger instanceof Player && (crew().knows(passenger.getUUID()) || crew().seated() < Math.max(1, stats.seats().size()));
+    }
+
+    /** Animals and other harmless creatures: they travel with a ship they're inside, standing. */
+    public static boolean carriesAlong(Entity entity) {
+        return entity instanceof net.minecraft.world.entity.Mob && !(entity instanceof net.minecraft.world.entity.monster.Enemy)
+                && entity.isAlive();
+    }
+
+    /** Where the fence an animal's lead is tied to stands, or null when it isn't tied to a fence. */
+    public static BlockPos tiedAt(Entity e) {
+        return e instanceof net.minecraft.world.entity.Leashable l && l.isLeashed()
+                && l.getLeashHolder() instanceof net.minecraft.world.entity.decoration.LeashFenceKnotEntity knot ? knot.getPos() : null;
+    }
+
+    /** True if an animal stands in the ship, or is on a lead tied to one of its fences. */
+    public boolean carries(Entity e, BlockPos origin) {
+        BlockPos fence = tiedAt(e);
+        return standsIn(e, origin) || fence != null && structure.blocks().containsKey(fence.subtract(origin));
+    }
+
+    /**
+     * An animal coming along: standing where it is (kept inside the ship), and if it's tied to
+     * one of the ship's fences, untied for the trip (no lead dropped) and tied up there again on arrival.
+     */
+    public void takeAnimal(Entity animal, BlockPos origin) {
+        BlockPos fence = tiedAt(animal);
+        if (fence != null && structure.blocks().containsKey(fence.subtract(origin))) {
+            tethers.put(animal.getUUID(), fence.subtract(origin));
+            ((net.minecraft.world.entity.Leashable) animal).dropLeash(true, false);
+        }
+        takeAboardStanding(animal, origin);
+    }
+
+    /** Animals in or around the ship's blocks (not already riding something). */
+    public List<Entity> animalsAboard(double margin) {
+        BlockPos o = blockOrigin();
+        net.minecraft.world.phys.AABB box = new net.minecraft.world.phys.AABB(
+                o.getX() + boundsMin.getX() - margin, o.getY() + boundsMin.getY() - margin, o.getZ() + boundsMin.getZ() - margin,
+                o.getX() + boundsMax.getX() + 1 + margin, o.getY() + boundsMax.getY() + 1 + margin, o.getZ() + boundsMax.getZ() + 1 + margin);
+        return new ArrayList<>(level().getEntities((Entity) null, box.inflate(10), e -> carriesAlong(e) && e.getVehicle() == null
+                && (box.contains(e.position()) || carries(e, o))));
+    }
+
+    /**
+     * A pet called aboard from further off (a tamed dog or cat that follows its owner, not one
+     * told to sit): standing beside its owner's seat.
+     */
+    public void takePetAboard(Entity pet, Player owner) {
+        int seat = crew.seatOf(owner.getUUID());
+        BlockPos spot = besideSeat(seat);
+        crew.walk(pet.getUUID(), new Vector3d(spot.getX() + 0.5, spot.getY() + 0.01, spot.getZ() + 0.5));
+        pet.fallDistance = 0;
+        pet.startRiding(this, true);
+        crewDirty = true;
     }
 
     @Override

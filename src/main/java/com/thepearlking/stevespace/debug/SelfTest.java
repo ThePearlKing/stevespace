@@ -169,6 +169,18 @@ public final class SelfTest {
                 });
                 return;
             }
+            if ("pets".equals(System.getenv("STEVESPACE_SELFTEST_ONLY"))) {
+                PetTests.run(server);
+                return;
+            }
+            if ("falls".equals(System.getenv("STEVESPACE_SELFTEST_ONLY"))) {
+                FallTests.run(server);
+                return;
+            }
+            if ("built".equals(System.getenv("STEVESPACE_SELFTEST_ONLY"))) {
+                BuiltTests.run(server);
+                return;
+            }
             if ("dive".equals(System.getenv("STEVESPACE_SELFTEST_ONLY"))) {
                 DiveTests.run(server);
                 return;
@@ -802,7 +814,7 @@ public final class SelfTest {
     /** The autopilot flies a rocket to orbit, time warp keeps it there, then it lands again. */
     static final class OrbitTests {
 
-        private static com.thepearlking.stevespace.vessel.VesselEntity vesselOf(net.minecraft.world.entity.Entity pilot) {
+        static com.thepearlking.stevespace.vessel.VesselEntity vesselOf(net.minecraft.world.entity.Entity pilot) {
             if (pilot instanceof net.minecraft.world.entity.player.Player player) {
                 return com.thepearlking.stevespace.vessel.VesselEntity.shipOf(player, 2);
             }
@@ -818,7 +830,7 @@ public final class SelfTest {
                 var el = o.elements(1);
                 return String.format("space alt=%.0f pe=%.0f ap=%.0f e=%.3f v=%.1f prop=%.2f ap=%s", o.altitude(),
                         el.periapsis() - o.body().radius(), el.apoapsis() - o.body().radius(), el.eccentricity(),
-                        o.state().velocity().length(), v.propellant(), v.autopilotStatus());
+                        o.state().velocity().length(), v.propellant(), v.autopilotStatus() + " ETA[" + v.autopilotDetail() + "]");
             }
             return String.format("%s y=%.0f v=(%.1f,%.1f,%.1f) prop=%.2f ap=%s grounded=%s",
                     v.inMapMode() ? "map" : v.level().dimension().location().toString(), v.mapY(),
@@ -2267,7 +2279,7 @@ public final class SelfTest {
                             v == null ? "vehicle=" + (pilot[0].getVehicle() == null ? "-" : pilot[0].getVehicle().getClass().getSimpleName())
                                     : (v.orbital() != null ? "alt=" + (int) v.orbital().altitude() : "y=" + (int) v.mapY() + " v=" + String.format("%.1f", v.velocity().length())
                                     + String.format(" (%.1f, %.1f, %.1f) thr=%.2f", v.velocity().x, v.velocity().y, v.velocity().z, v.throttle()))
-                                    + " thr=" + String.format("%.2f", v.throttle()) + " " + v.autopilotDebug()
+                                    + " thr=" + String.format("%.2f", v.throttle()) + " ETA[" + v.autopilotDetail() + "] " + v.autopilotDebug()
                                     + " " + v.autopilotStatus());
                 }
                 // Out of the ship for a whole second (not just the tick it turns into blocks or back).
@@ -2286,7 +2298,7 @@ public final class SelfTest {
                     double dx = geometry.xForLongitude(site[1]) - pilot[0].getX();
                     dx -= Math.round(dx / width) * width;
                     double miss = Math.hypot(dx, geometry.zForLatitude(site[0]) - pilot[0].getZ());
-                    check("lands-on-picked-spot-" + id, there && miss < 40, String.format("missed by %.0f blocks", miss));
+                    check("lands-on-picked-spot-" + id, there && miss < 15, String.format("missed by %.0f blocks", miss));
                 }
                 run(server, index + 1);
             });
@@ -2333,6 +2345,224 @@ public final class SelfTest {
             } catch (IllegalStateException e) {
                 return 1;
             }
+        }
+    }
+
+    /**
+     * Animals travel with the ship: a cow standing inside comes along, and the pilot's tamed wolf
+     * (following, 30 blocks off) is brought aboard; both get to orbit and back down alive.
+     */
+    static final class PetTests {
+
+        static void run(MinecraftServer server) {
+            ServerLevel level = server.overworld();
+            BlockPos spawn = level.getSharedSpawnPos();
+            int x = spawn.getX() + 120;
+            int z = spawn.getZ() + 120;
+            for (int dx = -1; dx <= 3; dx++) {
+                level.setChunkForced((x >> 4) + dx, z >> 4, true);
+            }
+            BlockPos ground = VesselTests.clearArea(level, x, z);
+            BlockPos seat = VesselTests.buildRocket(level, ground, 6);
+            BlockPos fence = seat.south();
+            level.setBlockAndUpdate(fence, net.minecraft.world.level.block.Blocks.OAK_FENCE.defaultBlockState());
+            BlockPos far = VesselTests.clearArea(level, x + 30, z);
+            final net.minecraft.server.level.ServerPlayer[] pilot = new net.minecraft.server.level.ServerPlayer[1];
+            final net.minecraft.world.entity.Entity[] cow = new net.minecraft.world.entity.Entity[1];
+            final net.minecraft.world.entity.animal.Wolf[] wolf = new net.minecraft.world.entity.animal.Wolf[1];
+            final net.minecraft.world.entity.animal.Sheep[] sheep = new net.minecraft.world.entity.animal.Sheep[1];
+            final int[] ticks = new int[1];
+            waitUntil(server, 600, () -> level.isPositionEntityTicking(seat) && level.isPositionEntityTicking(far), () -> {
+                pilot[0] = VesselTests.mockPlayer(level, "PetOwner");
+                pilot[0].setGameMode(net.minecraft.world.level.GameType.CREATIVE);
+                pilot[0].stopRiding(); // (still in the seat it landed in last run)
+                if (pilot[0].level() != level) {
+                    pilot[0].teleportTo(level, seat.getX() + 0.5, seat.getY() + 0.2, seat.getZ() + 0.5, java.util.Set.of(), 0, 0);
+                }
+                pilot[0].teleportTo(seat.getX() + 0.5, seat.getY() + 0.2, seat.getZ() + 0.5);
+                cow[0] = net.minecraft.world.entity.EntityType.COW.create(level);
+                cow[0].moveTo(seat.getX() + 0.5, seat.getY() + 2, seat.getZ() + 0.5, 0, 0); // on the cabin roof
+                cow[0].setOnGround(true);
+                level.addFreshEntity(cow[0]);
+                wolf[0] = net.minecraft.world.entity.EntityType.WOLF.create(level);
+                wolf[0].moveTo(far.getX() + 0.5, far.getY(), far.getZ() + 0.5, 0, 0);
+                level.addFreshEntity(wolf[0]);
+                wolf[0].tame(pilot[0]);
+                // A sheep on the pad floor below, on a lead tied to the ship's fence.
+                sheep[0] = net.minecraft.world.entity.EntityType.SHEEP.create(level);
+                sheep[0].moveTo(ground.getX() + 3.5, ground.getY(), ground.getZ() + 2.5, 0, 0);
+                level.addFreshEntity(sheep[0]);
+                sheep[0].setLeashedTo(net.minecraft.world.entity.decoration.LeashFenceKnotEntity.getOrCreateKnot(level, fence), true);
+                wolf[0].setOrderedToSit(false);
+                wolf[0].setInSittingPose(false);
+            });
+            later(server, 40, () -> {
+                var v = com.thepearlking.stevespace.vessel.VesselServer.tryLaunch(pilot[0], seat,
+                        new com.thepearlking.stevespace.vessel.VesselControls(0, 0, 0, 0));
+                StevesSpace.LOGGER.info("[SelfTest] pets before launch: pilot {} vehicle {}, cow {}, wolf {} sit {} owner {}", pilot[0].position(), pilot[0].getVehicle(),
+                        cow[0].position(), wolf[0].position(), wolf[0].isOrderedToSit(), wolf[0].getOwnerUUID());
+                check("pets-launch", v != null, String.valueOf(v));
+                if (v == null) {
+                    finish(server);
+                    return;
+                }
+                check("animal-inside-comes-along", cow[0].getVehicle() == v, "cow vehicle " + cow[0].getVehicle());
+                check("pet-far-away-comes-along", wolf[0].getVehicle() == v, "wolf vehicle " + wolf[0].getVehicle());
+                check("tied-animal-comes-along", sheep[0].getVehicle() == v && !sheep[0].isLeashed(), "sheep vehicle " + sheep[0].getVehicle());
+                v.startAutopilot(com.thepearlking.stevespace.vessel.Autopilot.Program.ORBIT);
+            });
+            waitUntil(server, 20 * 60 * 8, () -> {
+                var v = OrbitTests.vesselOf(pilot[0]);
+                ticks[0]++;
+                return v != null && v.orbital() != null && !v.autopilotEngaged() && ticks[0] > 40;
+            }, () -> later(server, 60, () -> {
+                var v = OrbitTests.vesselOf(pilot[0]);
+                java.util.List<String> where = new java.util.ArrayList<>();
+                int aboard = 0;
+                for (var id : java.util.List.of(cow[0].getUUID(), wolf[0].getUUID(), sheep[0].getUUID())) {
+                    net.minecraft.world.entity.Entity found = null;
+                    for (ServerLevel l : server.getAllLevels()) {
+                        if (l.getEntity(id) != null) {
+                            found = l.getEntity(id);
+                        }
+                    }
+                    where.add(found == null ? "gone" : found + " riding " + found.getVehicle());
+                    // Riding it, or standing in it while it's blocks in orbit.
+                    if (found != null && v != null && (found.getVehicle() == v
+                            || v.materialized() && found.level() == v.level() && v.holds(found.getX(), found.getY(), found.getZ(), 2))) {
+                        aboard++;
+                    }
+                }
+                check("pets-reach-orbit", v != null && aboard == 3, (v == null ? "no vessel" : v.toString()) + " " + where);
+                v.startAutopilot(com.thepearlking.stevespace.vessel.Autopilot.Program.LAND);
+                waitUntil(server, 20 * 60 * 10, () -> pilot[0].getVehicle() instanceof com.thepearlking.stevespace.block.SeatEntity
+                        && pilot[0].level() == server.overworld(), () -> {
+                    var animals = server.overworld().getEntities((net.minecraft.world.entity.Entity) null, pilot[0].getBoundingBox().inflate(12),
+                            e -> e.isAlive() && (e.getUUID().equals(cow[0].getUUID()) || e.getUUID().equals(wolf[0].getUUID())
+                                    || e.getUUID().equals(sheep[0].getUUID())));
+                    check("pets-land-with-you", animals.size() == 3, animals.toString());
+                    var landedSheep = animals.stream().filter(e -> e instanceof net.minecraft.world.entity.animal.Sheep).findFirst();
+                    check("tied-animal-tied-again", landedSheep.isPresent() && com.thepearlking.stevespace.vessel.VesselEntity.tiedAt(landedSheep.get()) != null,
+                            landedSheep.map(e -> "tied at " + com.thepearlking.stevespace.vessel.VesselEntity.tiedAt(e)).orElse("no sheep"));
+                    finish(server);
+                });
+            }));
+        }
+    }
+
+    /** Low gravity, soft landings: a hop's worth of fall doesn't hurt an animal on the Moon; a long drop still does. */
+    static final class FallTests {
+
+        static void run(MinecraftServer server) {
+            ServerLevel moon = server.getLevel(net.minecraft.resources.ResourceKey.create(net.minecraft.core.registries.Registries.DIMENSION,
+                    net.minecraft.resources.ResourceLocation.fromNamespaceAndPath("stevespace", "moon")));
+            moon.setChunkForced(0, 0, true);
+            moon.getChunk(0, 0);
+            int ground = moon.getHeight(net.minecraft.world.level.levelgen.Heightmap.Types.MOTION_BLOCKING, 8, 8);
+            var low = net.minecraft.world.entity.EntityType.COW.create(moon);
+            var high = net.minecraft.world.entity.EntityType.COW.create(moon);
+            low.moveTo(8.5, ground + 8, 8.5, 0, 0);
+            high.moveTo(4.5, ground + 40, 4.5, 0, 0);
+            moon.addFreshEntity(low);
+            moon.addFreshEntity(high);
+            // Loose items: weightless in space, falling slowly on the Moon.
+            ServerLevel space = server.getLevel(com.thepearlking.stevespace.world.SpaceDimension.KEY);
+            int sx = 9_000_000 + 64;
+            space.setChunkForced(sx >> 4, 0, true);
+            space.getChunk(sx >> 4, 0);
+            var floating = new net.minecraft.world.entity.item.ItemEntity(space, sx + 0.5, 150, 0.5,
+                    new net.minecraft.world.item.ItemStack(net.minecraft.world.item.Items.APPLE));
+            floating.setDeltaMovement(0, 0, 0);
+            space.addFreshEntity(floating);
+            var moonItem = new net.minecraft.world.entity.item.ItemEntity(moon, 12.5, ground + 30, 12.5,
+                    new net.minecraft.world.item.ItemStack(net.minecraft.world.item.Items.APPLE));
+            moonItem.setDeltaMovement(0, 0, 0);
+            moon.addFreshEntity(moonItem);
+            later(server, 40, () -> {
+                check("item-weightless-in-space", floating.isAlive() && floating.tickCount > 30 && Math.abs(floating.getY() - 150) < 0.5,
+                        String.format("y %.2f after %d ticks", floating.getY(), floating.tickCount));
+                double fell = ground + 30 - moonItem.getY();
+                // On Earth an item falls ~15 blocks in 2 s (with air drag); the Moon has a sixth of the pull.
+                check("item-falls-slowly-on-moon", fell > 0.5 && fell < 6, String.format("fell %.2f in 2 s", fell));
+            });
+            later(server, 400, () -> {
+                check("low-g-hop-no-fall-damage", low.isAlive() && low.getHealth() >= low.getMaxHealth(),
+                        low.getHealth() + "/" + low.getMaxHealth() + " safe " + low.getAttributeValue(net.minecraft.world.entity.ai.attributes.Attributes.SAFE_FALL_DISTANCE));
+                check("low-g-long-drop-still-hurts", !high.isAlive() || high.getHealth() < high.getMaxHealth(),
+                        high.getHealth() + "/" + high.getMaxHealth() + " on ground " + high.onGround());
+                finish(server);
+            });
+        }
+    }
+
+    /**
+     * Builds seen from space whatever made them: a /fill, blocks written straight into a chunk
+     * (the way Axiom does it, with no events), and a natural forest that must count as nothing.
+     */
+    static final class BuiltTests {
+
+        static void run(MinecraftServer server) {
+            ServerLevel level = server.overworld();
+            int bx = 40_000;
+            int bz = 40_000;
+            // Three fresh chunks side by side (generated now, so their ground is recorded).
+            for (int i = 0; i < 5; i++) {
+                level.setChunkForced((bx >> 4) + i, bz >> 4, true);
+                level.getChunk((bx >> 4) + i, bz >> 4);
+            }
+            later(server, 20, () -> {
+                // 1: /fill, 8 x 12 x 8 emerald on the ground of the first chunk's first cell.
+                int y1 = level.getHeight(net.minecraft.world.level.levelgen.Heightmap.Types.WORLD_SURFACE, bx, bz);
+                server.getCommands().performPrefixedCommand(server.createCommandSourceStack().withLevel(level).withSuppressedOutput(),
+                        String.format("fill %d %d %d %d %d %d minecraft:emerald_block", bx, y1, bz, bx + 7, y1 + 11, bz + 7));
+                check("built-fill-ran", level.getBlockState(new BlockPos(bx + 3, y1 + 5, bz + 3)).is(net.minecraft.world.level.block.Blocks.EMERALD_BLOCK),
+                        String.valueOf(level.getBlockState(new BlockPos(bx + 3, y1 + 5, bz + 3))));
+                // 2: straight into the chunk's sections, no events (like Axiom).
+                int ax = bx + 32;
+                var chunk = level.getChunk(ax >> 4, bz >> 4);
+                int y2 = level.getHeight(net.minecraft.world.level.levelgen.Heightmap.Types.WORLD_SURFACE, ax, bz) + 3;
+                var quartz = net.minecraft.world.level.block.Blocks.QUARTZ_BLOCK.defaultBlockState();
+                for (int y = y2; y < y2 + 4; y++) {
+                    var section = chunk.getSection(chunk.getSectionIndex(y));
+                    for (int x = 0; x < 8; x++) {
+                        for (int z = 0; z < 8; z++) {
+                            section.setBlockState(x, y & 15, z, quartz, false);
+                        }
+                    }
+                }
+                chunk.setUnsaved(true);
+                later(server, 130, () -> {
+                    var visible = com.thepearlking.stevespace.world.Landmarks.get(server).visible("minecraft:overworld");
+                    var fill = visible.get(cellKey(bx, bz));
+                    check("built-fill-seen-from-space", fill != null && fill.count() >= 700, String.valueOf(fill));
+                    var axiom = visible.get(cellKey(ax, bz));
+                    check("built-direct-chunk-write-seen", axiom != null && axiom.count() >= 250, String.valueOf(axiom));
+                    int natural = 0;
+                    int nx = bx + 64;
+                    for (int cx = 0; cx < 2; cx++) {
+                        for (int cz = 0; cz < 2; cz++) {
+                            if (visible.containsKey(cellKey(nx + cx * 8, bz + cz * 8))) {
+                                natural++;
+                            }
+                        }
+                    }
+                    check("built-natural-ground-is-nothing", natural == 0, natural + " cells");
+                    // Taking the fill away again takes it off the map.
+                    server.getCommands().performPrefixedCommand(server.createCommandSourceStack().withLevel(level).withSuppressedOutput(),
+                            String.format("fill %d %d %d %d %d %d minecraft:air", bx, y1, bz, bx + 7, y1 + 11, bz + 7));
+                    later(server, 130, () -> {
+                        var after = com.thepearlking.stevespace.world.Landmarks.get(server).visible("minecraft:overworld").get(cellKey(bx, bz));
+                        check("built-removed-when-cleared", after == null, String.valueOf(after));
+                        finish(server);
+                    });
+                });
+            });
+        }
+
+        private static long cellKey(int x, int z) {
+            int cx = Math.floorDiv(x, com.thepearlking.stevespace.world.Landmarks.CELL);
+            int cz = Math.floorDiv(z, com.thepearlking.stevespace.world.Landmarks.CELL);
+            return ((long) cx << 32) ^ (cz & 0xffffffffL);
         }
     }
 

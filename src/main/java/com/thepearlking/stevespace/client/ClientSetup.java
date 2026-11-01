@@ -27,6 +27,10 @@ public final class ClientSetup {
     }
 
     public static void init(IEventBus modBus) {
+        com.thepearlking.stevespace.world.LooseGravity.clientEntities = level ->
+                level instanceof net.minecraft.client.multiplayer.ClientLevel client ? client.entitiesForRendering() : java.util.List.of();
+        com.thepearlking.stevespace.world.LooseGravity.clientRatio = level -> com.thepearlking.stevespace.world.LooseGravity.ratio(
+                ClientUniverse.system() == null ? null : ClientUniverse.system().bodyForDimension(level.dimension().location().toString()));
         MinecraftForge.EVENT_BUS.register(ClientUniverse.class);
         MinecraftForge.EVENT_BUS.register(SkyEvents.class);
         MinecraftForge.EVENT_BUS.register(FlightInput.class);

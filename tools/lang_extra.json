@@ -394,6 +394,7 @@
   "hud.stevespace.autopilot.warping": "Autopilot is warping time: %s\u00d7",
   "hud.stevespace.autopilot.warp_normal": "Autopilot: back to normal time",
   "stevespace.warp.near_planet": "Faster warp only between the planets",
+  "stevespace.autopilot.no_propellant": "Autopilot off: out of propellant, so it can't make its next burn. The ship coasts on.",
   "stevespace.autopilot.too_weak": "Not landing: the engines are too weak to stop on this world. Staying in orbit.",
   "screen.stevespace.radio.channel_hint": "Only radios on the same frequency hear you",
   "screen.stevespace.map.pick_hint": "Click a world to fly there \u00b7 scroll out to see more \u00b7 click twice to look at it",

@@ -105,6 +105,20 @@ public final class SolarSystem {
                 .size(58_232, 95.16 * EARTH_MU).spin(0.444, 26.73).axisAzimuth(79)
                 .looks(0xD9C79C, 0.50).atmosphere(0xE0D2AE, 4_500, 1)
                 .rings(74_500, 140_220, 0xCDBB95, 0.85));
+        add(moon("mimas", "Mimas", saturn, 185_539, 0.0196, 28.3, 169.0, 14.0, 255.0)
+                .size(198, 6.28e-6 * EARTH_MU).tidallyLocked(0).looks(0xC9C6C2, 0.96));
+        add(moon("tethys", "Tethys", saturn, 294_619, 0.0001, 27.8, 169.0, 260.0, 36.0)
+                .size(531, 1.033e-4 * EARTH_MU).tidallyLocked(0).looks(0xE4E2DF, 1.0));
+        add(moon("dione", "Dione", saturn, 377_396, 0.0022, 26.75, 169.0, 168.0, 121.0)
+                .size(561, 1.834e-4 * EARTH_MU).tidallyLocked(0).looks(0xD8D5D0, 1.0));
+        add(moon("rhea", "Rhea", saturn, 527_108, 0.0013, 27.1, 169.0, 256.0, 311.0)
+                .size(764, 3.863e-4 * EARTH_MU).tidallyLocked(0).looks(0xD2CEC8, 0.95));
+        add(moon("hyperion", "Hyperion", saturn, 1_481_010, 0.1230, 27.2, 169.0, 214.0, 177.0)
+                .size(135, 9.4e-7 * EARTH_MU).looks(0xA89B85, 0.3));
+        add(moon("iapetus", "Iapetus", saturn, 3_560_820, 0.0286, 17.3, 169.0, 271.0, 74.0)
+                .size(735, 3.024e-4 * EARTH_MU).tidallyLocked(0).looks(0x8A7B68, 0.25));
+        add(moon("phoebe", "Phoebe", saturn, 12_960_000, 0.1562, 175.3, 241.0, 280.0, 287.0)
+                .size(107, 1.39e-6 * EARTH_MU).looks(0x3E3A36, 0.06));
         add(moon("enceladus", "Enceladus", saturn, 237_948, 0.0047, 26.73, 169.0, 115.0, 200.0)
                 .size(252, 1.8e-5 * EARTH_MU).tidallyLocked(0)
                 .looks(0xF2F4F6, 1.0).landable("stevespace:enceladus"));
@@ -112,13 +126,37 @@ public final class SolarSystem {
                 .size(2_575, 0.02253 * EARTH_MU).tidallyLocked(0.3)
                 .looks(0xD39C48, 0.22).atmosphere(0xC98A3A, 2200, 1.5).landable("stevespace:titan"));
 
-        add(planet("uranus", "Uranus", Kind.ICE_GIANT, 19.21845, 0.046295, 0.773, 74.006, 173.005, 314.055)
+        CelestialBody uranus = add(planet("uranus", "Uranus", Kind.ICE_GIANT, 19.21845, 0.046295, 0.773, 74.006, 173.005, 314.055)
                 .size(25_362, 14.54 * EARTH_MU).spin(-0.71833, 97.77).axisAzimuth(170)
                 .looks(0xA7D3DA, 0.49).atmosphere(0xB5E0E6, 2_500, 1)
                 .rings(41_800, 51_150, 0x5E5A57, 0.25));
+        // Uranus turns backwards about its tilted axis here, so its moons (going round the way it
+        // turns, in the plane of its rings) have inclination 180 - 97.77 and node azimuth + 270.
+        add(moon("puck", "Puck", uranus, 86_004, 0.00012, 82.6, 80.0, 0.0, 40.0)
+                .size(81, 3.2e-7 * EARTH_MU).tidallyLocked(0).looks(0x5A5753, 0.10));
+        add(moon("miranda", "Miranda", uranus, 129_390, 0.0013, 86.57, 80.0, 68.0, 311.0)
+                .size(236, 1.07e-5 * EARTH_MU).tidallyLocked(0).looks(0xA19D98, 0.32));
+        add(moon("ariel", "Ariel", uranus, 191_020, 0.0012, 82.49, 80.0, 115.0, 39.0)
+                .size(579, 2.09e-4 * EARTH_MU).tidallyLocked(0).looks(0xBDB8B2, 0.53));
+        add(moon("umbriel", "Umbriel", uranus, 266_000, 0.0039, 82.36, 80.0, 84.0, 12.0)
+                .size(585, 2.13e-4 * EARTH_MU).tidallyLocked(0).looks(0x67645F, 0.26));
+        add(moon("titania", "Titania", uranus, 435_910, 0.0011, 82.57, 80.0, 284.0, 24.0)
+                .size(788, 5.69e-4 * EARTH_MU).tidallyLocked(0).looks(0xA79E95, 0.35));
+        add(moon("oberon", "Oberon", uranus, 583_520, 0.0014, 82.29, 80.0, 104.0, 283.0)
+                .size(761, 5.16e-4 * EARTH_MU).tidallyLocked(0).looks(0x8F857C, 0.31));
         CelestialBody neptune = add(planet("neptune", "Neptune", Kind.ICE_GIANT, 30.11039, 0.008988, 1.770, 131.784, 48.124, 304.349)
                 .size(24_622, 17.15 * EARTH_MU).spin(0.6713, 28.32)
                 .looks(0x4B70C9, 0.44).atmosphere(0x5A82D6, 2_500, 1));
+        add(moon("despina", "Despina", neptune, 52_526, 0.0002, 28.39, 0.0, 0.0, 160.0)
+                .size(75, 1.8e-7 * EARTH_MU).tidallyLocked(0).looks(0x55524D, 0.09));
+        add(moon("galatea", "Galatea", neptune, 61_953, 0.00022, 28.37, 0.0, 0.0, 270.0)
+                .size(88, 3.5e-7 * EARTH_MU).tidallyLocked(0).looks(0x55524D, 0.08));
+        add(moon("larissa", "Larissa", neptune, 73_548, 0.0014, 28.52, 0.0, 0.0, 30.0)
+                .size(97, 7.0e-7 * EARTH_MU).tidallyLocked(0).looks(0x5A5650, 0.09));
+        add(moon("proteus", "Proteus", neptune, 117_647, 0.0005, 28.4, 0.0, 0.0, 200.0)
+                .size(210, 7.37e-6 * EARTH_MU).tidallyLocked(0).looks(0x5C5852, 0.10));
+        add(moon("nereid", "Nereid", neptune, 5_513_818, 0.7507, 7.23, 334.8, 281.0, 359.0)
+                .size(170, 5.2e-6 * EARTH_MU).looks(0x8C8783, 0.16));
         add(moon("triton", "Triton", neptune, 354_759, 0.000016, 157.3, 177.0, 0.0, 264.0)
                 .size(1_353, 0.00359 * EARTH_MU).tidallyLocked(0)
                 .looks(0xCDBDB2, 0.76).landable("stevespace:triton"));

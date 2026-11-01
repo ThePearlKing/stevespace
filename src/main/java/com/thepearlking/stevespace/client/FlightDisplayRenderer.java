@@ -74,6 +74,17 @@ public class FlightDisplayRenderer implements BlockEntityRenderer<FlightDisplayB
     private static List<String[]> readout(Minecraft mc) {
         List<String[]> lines = new ArrayList<>();
         SolarSystem system = ClientUniverse.system();
+        if (ClientSpace.orbitActive() && system != null && ClientSpace.body() != null && ClientSpace.orbit() != null) {
+            // Aboard a flying ship: its own orbit.
+            CelestialBody body = ClientSpace.body();
+            double mu = body.mu() * com.thepearlking.stevespace.config.SpaceConfig.GRAVITY_SCALE.get();
+            OrbitalElements orbit = ClientSpace.orbit();
+            StateVector now = ClientSpace.stateAt(ClientUniverse.time());
+            if (now != null) {
+                orbitLines(lines, body, orbit, now, mu);
+                return lines;
+            }
+        }
         var cell = ClientSpace.cellOrbit();
         if (cell != null && system != null) {
             CelestialBody body = system.body(cell.body());
@@ -83,14 +94,7 @@ public class FlightDisplayRenderer implements BlockEntityRenderer<FlightDisplayB
                 StateVector at = new StateVector(new DVec3(st[0], st[1], st[2]), new DVec3(st[3], st[4], st[5]));
                 OrbitalElements orbit = Kepler.elementsFromState(at, mu, cell.time());
                 StateVector now = orbit.stateAt(ClientUniverse.time(), mu);
-                lines.add(new String[]{"ORBIT", body.displayName().toUpperCase(java.util.Locale.ROOT)});
-                lines.add(new String[]{"ALT", length(now.position().length() - body.radius())});
-                lines.add(new String[]{"SPD", String.format("%.0f m/s", now.velocity().length())});
-                lines.add(new String[]{"AP", orbit.eccentricity() < 1 ? length(orbit.apoapsis() - body.radius()) : "ESC"});
-                lines.add(new String[]{"PE", length(orbit.periapsis() - body.radius())});
-                if (orbit.eccentricity() < 1) {
-                    lines.add(new String[]{"PERIOD", duration(orbit.period(mu))});
-                }
+                orbitLines(lines, body, orbit, now, mu);
                 return lines;
             }
         }
@@ -105,6 +109,17 @@ public class FlightDisplayRenderer implements BlockEntityRenderer<FlightDisplayB
         lines.add(new String[]{"DAY", duration(solarDay(system, body))});
         lines.add(new String[]{"AIR", body.hasAtmosphere() && body.id().equals("earth") ? "BREATHABLE" : (body.hasAtmosphere() ? "TOXIC" : "NONE")});
         return lines;
+    }
+
+    private static void orbitLines(List<String[]> lines, CelestialBody body, OrbitalElements orbit, StateVector now, double mu) {
+        lines.add(new String[]{"ORBIT", body.displayName().toUpperCase(java.util.Locale.ROOT)});
+        lines.add(new String[]{"ALT", length(now.position().length() - body.radius())});
+        lines.add(new String[]{"SPD", String.format("%.0f m/s", now.velocity().length())});
+        lines.add(new String[]{"AP", orbit.eccentricity() < 1 ? length(orbit.apoapsis() - body.radius()) : "ESC"});
+        lines.add(new String[]{"PE", length(orbit.periapsis() - body.radius())});
+        if (orbit.eccentricity() < 1) {
+            lines.add(new String[]{"PERIOD", duration(orbit.period(mu))});
+        }
     }
 
     /** Sunrise to sunrise, in seconds. */

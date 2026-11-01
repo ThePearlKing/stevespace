@@ -76,6 +76,28 @@ public final class Landmarks extends SavedData {
         }
     }
 
+    /**
+     * Sets one cell to what a look at the blocks found there (see {@link BuiltScan}); null when
+     * nothing's built in it.
+     */
+    public void setCell(String dimension, int cx, int cz, Cell cell) {
+        Map<Long, Cell> map = cells.computeIfAbsent(dimension, d -> new HashMap<>());
+        long k = key(cx, cz);
+        Cell old = map.get(k);
+        if (java.util.Objects.equals(old, cell)) {
+            return;
+        }
+        if (cell == null) {
+            map.remove(k);
+        } else {
+            map.put(k, cell);
+        }
+        if (old != null && old.count() >= VISIBLE || cell != null && cell.count() >= VISIBLE) {
+            changed = true;
+        }
+        setDirty();
+    }
+
     /** For tests and world tools: a block built here, as if placed by a player. */
     public static void recordBuilt(ServerLevel level, BlockPos pos, int color) {
         get(level.getServer()).add(level.dimension().location().toString(), pos, color);
